@@ -1,0 +1,96 @@
+run:
+  go: "1.21"
+  allow-parallel-runners: true
+
+output:
+  print-issued-lines: true
+
+linters:
+  enable:
+    - asciicheck
+    - bidichk
+    - bodyclose # default
+    - containedctx
+    - deadcode # default
+    - decorder
+    - dogsled
+    - dupl
+    - durationcheck
+    - errcheck # default
+    - errchkjson
+    - errname # default
+    - errorlint
+    - execinquery
+    - exhaustive
+    - exportloopref
+    - forbidigo
+    - forcetypeassert
+    - goconst
+    - gocritic
+    - gocyclo
+    - godot
+    - goerr113
+    - gofmt
+    - gofumpt
+    - goimports
+    - gomoddirectives
+    - gomodguard
+    - goprintffuncname
+    - gosimple # default
+    - govet # default
+    - grouper
+    - ifshort
+    - importas
+    - ineffassign # default
+    - interfacer # is deprecated (since v1.38.0) but still working
+    - lll
+    - makezero
+    # - maligned # is deprecated (since v1.38.0) but still working
+    - misspell
+    - nakedret
+    - nilerr
+    - nilnil
+    - noctx # finds sending http request without context.Context
+    - nolintlint
+    # - nonamedreturns
+    - nosprintfhostport
+    # - paralleltest
+    - prealloc
+    - predeclared
+    - promlinter
+    - rowserrcheck
+    - scopelint # is deprecated - but don't remove it
+    - sqlclosecheck
+    - staticcheck # default
+    - structcheck # default
+    - tenv
+    # - testpackage
+    - thelper
+    - tparallel
+    - typecheck # default
+    - unconvert
+    - unparam
+    - unused # default
+    - usestdlibvars
+    - varcheck # default
+    - wastedassign
+    - whitespace
+
+linters-settings:
+  forbidigo:
+    forbid:
+      - ^print$
+      - ^println.*$
+      # - 'fmt\.Print.*'
+
+  lll:
+    line-length: 137
+    tab-width: 2
+
+  nakedret:
+    max-func-lines: 47
+
+issues:
+  exclude-use-default: false
+  max-issues-per-linter: 0
+  max-same-issues: 0

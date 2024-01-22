@@ -2,12 +2,11 @@
 package bugz
 
 import (
+	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/url"
-	//"time"
-	"encoding/json"
 
 	. "hugpoint.tech/freebsd/forge/util"
 )
@@ -41,7 +40,7 @@ func NewBugzClient() BugzClient {
 		url:   "https://bugs.freebsd.org/bugzilla/rest",
 		token: "",
 		http:  &http.Client{
-			//Timeout: time.Second * 10,
+			// Timeout: time.Second * 10,
 		},
 	}
 	formData := url.Values{}
@@ -56,9 +55,9 @@ func NewBugzClient() BugzClient {
 		CheckFatal(fmt.Errorf("login failed, status code: %d", response.StatusCode))
 	}
 
-	body, err := ioutil.ReadAll(response.Body)
+	body, err := io.ReadAll(response.Body)
 	if err != nil {
-		err = fmt.Errorf("error reading bugzilla login response body: %v", err)
+		err = fmt.Errorf("error reading bugzilla login response body: %w", err)
 		CheckFatal(err)
 	}
 
@@ -66,7 +65,7 @@ func NewBugzClient() BugzClient {
 	CheckFatal(err)
 
 	if loginResponse.Token == "" {
-		err = fmt.Errorf("Login tokenis empty")
+		err = fmt.Errorf("login token is empty")
 		CheckFatal(err)
 	}
 	bugz.token = loginResponse.Token

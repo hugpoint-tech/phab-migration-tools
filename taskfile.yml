@@ -1,0 +1,33 @@
+version: "3"
+
+vars:
+  GOFILES:
+    sh: find . -type f -name '*.go' -not -name '*mock.go' -not -name '*_gen.go' -not -path "*/vendor/*" -not -path "*mock*"
+
+tasks:
+  default:
+    cmds:
+      - task: check-tools
+      - task: format-code
+      - task: lint-code
+
+  check-tools:
+    - which gofumpt | go install mvdan.cc/gofumpt@v0.5.0
+    - which gogroup | go install github.com/vasi-stripe/gogroup/cmd/gogroup@v0.0.0-20230202112607-d3d06dd1ea7e
+    - which deadcode | go install golang.org/x/tools/cmd/deadcode@latest
+    - which golangci-lint | go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.55.2
+    - which govulncheck | go install golang.org/x/vuln/cmd/govulncheck@latest
+
+  format-code:
+    cmds:
+      - for: { var: GOFILES }
+        cmd: gofumpt -extra -w {{.ITEM}}
+      - for: { var: GOFILES }
+        cmd: gogroup -order std,other,prefix=hugpoint.tech/freebsd/forge -rewrite {{.ITEM}}
+
+  lint-code:
+    cmds:
+      - golangci-lint -c=.golangci.yml run ./...
+      - deadcode ./...
+      - govulncheck ./...
+      - go mod tidy

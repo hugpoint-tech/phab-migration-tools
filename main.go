@@ -4,16 +4,16 @@ package main
 import (
 	"database/sql"
 	"fmt"
-	"hugpoint.tech/freebsd/forge/bugz"
-	"hugpoint.tech/freebsd/forge/phab"
-	. "hugpoint.tech/freebsd/forge/util"
 	"strings"
 
 	_ "github.com/mattn/go-sqlite3"
+
+	"hugpoint.tech/freebsd/forge/bugz"
+	"hugpoint.tech/freebsd/forge/phab"
+	. "hugpoint.tech/freebsd/forge/util"
 )
 
 func main() {
-
 	fmt.Println("Awesome FreeBSD Phabricator to Gitea/Forgejo Migrator 9000")
 
 	db, err := sql.Open("sqlite3", "./forge.db")

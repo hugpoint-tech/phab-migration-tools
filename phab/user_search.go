@@ -3,7 +3,7 @@ package phab
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/url"
 
@@ -28,7 +28,6 @@ func (self *PhabClient) UserSearch() *UserSearchAPI {
 }
 
 func (self *UserSearchAPI) Get() []User {
-
 	var response *UserResponse
 	result := []User{}
 
@@ -40,7 +39,7 @@ func (self *UserSearchAPI) Get() []User {
 		http_response, err := http.PostForm(self.client.url+self.method, self.params)
 		CheckFatal(err)
 
-		body, err := ioutil.ReadAll(http_response.Body)
+		body, err := io.ReadAll(http_response.Body)
 		CheckFatal(err)
 
 		err = json.Unmarshal(body, response)

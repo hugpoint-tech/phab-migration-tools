@@ -11,7 +11,7 @@ func NewPhabClient() PhabClient {
 	// 	panic("PHABRICATOR_TOKEN is not set")
 	// }
 	return PhabClient{
-		//token: token,
+		// token: token,
 
 		token: "",
 		url:   "https://reviews.freebsd.org/api/",

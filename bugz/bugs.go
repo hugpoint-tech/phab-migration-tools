@@ -4,11 +4,10 @@ package bugz
 /// https://bugzilla.readthedocs.io/en/latest/api/index.html
 
 import (
-	"fmt"
-	"io/ioutil"
-	"net/url"
-	//"time"
 	"encoding/json"
+	"fmt"
+	"io"
+	"net/url"
 	"strconv"
 
 	. "hugpoint.tech/freebsd/forge/util"
@@ -42,7 +41,7 @@ func (self *BugsAPI) GetAll() []Bug {
 		response, err := self.client.http.Get(self.client.url + "/bug?" + self.params.Encode())
 		CheckFatal(err)
 
-		body, err := ioutil.ReadAll(response.Body)
+		body, err := io.ReadAll(response.Body)
 		CheckFatal(err)
 
 		err = json.Unmarshal(body, &bugsResponse)
@@ -55,8 +54,8 @@ func (self *BugsAPI) GetAll() []Bug {
 		} else {
 			offset = offset + batch_size
 		}
+		response.Body.Close()
 	}
 
 	return result
-
 }
