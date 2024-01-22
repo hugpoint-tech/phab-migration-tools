@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
+	"time"
 
 	_ "github.com/mattn/go-sqlite3"
 
@@ -72,15 +73,29 @@ func main() {
 
 	CheckFatal(err)
 
+	if _, err := db.Query("SELECT * from bugz_users"); err != nil {
+		fmt.Println("SELECT * from bugz_users", err)
+		return
+	}
+
+	if _, err := db.Query("SELECT * from bugz_users222"); err != nil {
+		fmt.Println("SELECT * from bugz_users222", err)
+		return
+	}
+
 	fmt.Println("Getting data from Bugzilla")
+
+	tn := time.Now().UTC()
+	// bugsStream := make(chan bugz.Bug, 1000)
 	bugzilla := bugz.NewBugzClient()
 	bugs := bugzilla.Bugs().GetAll()
+
+	fmt.Println("got bugs in", len(bugs), time.Since(tn))
 
 	tx, err := db.Begin()
 	CheckFatal(err)
 
 	for i, bug := range bugs {
-
 		fmt.Printf("\rInserting bug into sql: %d", i)
 		_, err = tx.Exec(`
 	    	INSERT OR REPLACE INTO bugs (
@@ -138,8 +153,7 @@ func main() {
 	phab := phab.NewPhabClient()
 	users := phab.UserSearch().Get()
 
-	// Begin a transaction
-	tx, err = db.Begin()
+	tx, err = db.Begin() // Begin a transaction
 	CheckFatal(err)
 	stmt, err := tx.Prepare(`
         INSERT INTO phab_users (
@@ -173,6 +187,9 @@ func main() {
 			user.Fields.Policy.Edit,
 			user.Fields.Policy.View,
 		)
+		if err != nil {
+			fmt.Printf("Inserting phab user into sql %v, err: %s", i, err)
+		}
 	}
 	fmt.Println()
 	tx.Commit()

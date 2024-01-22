@@ -31,3 +31,8 @@ tasks:
       - deadcode ./...
       - govulncheck ./...
       - go mod tidy
+
+  dc-up:
+    cmds:
+      - docker-compose -f ../local/docker-compose.yml -p localproj build
+      - docker-compose -f ../local/docker-compose.yml -p localproj up -d

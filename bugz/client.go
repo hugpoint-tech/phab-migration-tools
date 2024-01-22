@@ -4,9 +4,9 @@ package bugz
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
+	"os"
 
 	. "hugpoint.tech/freebsd/forge/util"
 )
@@ -24,16 +24,14 @@ type BugzLoginResponse struct {
 }
 
 func NewBugzClient() BugzClient {
-	// login, ok := os.LookupEnv("BUGZILLA_LOGIN")
-	// if !ok {
-	// 	panic("BUGZILLA_LOGIN is not set")
-	// }
-	// password, ok := os.LookupEnv("BUGZILLA_PASSWORD")
-	// if !ok {
-	// 	panic("BUGZILLA_PASSWORD is not set")
-	// }
-	login := ""
-	password := ``
+	login, ok := os.LookupEnv("BUGZILLA_LOGIN")
+	if !ok {
+		panic("BUGZILLA_LOGIN is not set")
+	}
+	password, ok := os.LookupEnv("BUGZILLA_PASSWORD")
+	if !ok {
+		panic("BUGZILLA_PASSWORD is not set")
+	}
 	var loginResponse BugzLoginResponse
 
 	bugz := BugzClient{
@@ -55,14 +53,9 @@ func NewBugzClient() BugzClient {
 		CheckFatal(fmt.Errorf("login failed, status code: %d", response.StatusCode))
 	}
 
-	body, err := io.ReadAll(response.Body)
-	if err != nil {
-		err = fmt.Errorf("error reading bugzilla login response body: %w", err)
-		CheckFatal(err)
+	if err := json.NewDecoder(response.Body).Decode(&loginResponse); err != nil {
+		CheckFatal(fmt.Errorf("error reading bugzilla login response body: %w", err))
 	}
-
-	err = json.Unmarshal(body, &loginResponse)
-	CheckFatal(err)
 
 	if loginResponse.Token == "" {
 		err = fmt.Errorf("login token is empty")

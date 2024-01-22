@@ -3,7 +3,6 @@ package phab
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 
@@ -16,51 +15,47 @@ type UserSearchAPI struct {
 	params url.Values
 }
 
-func (self *PhabClient) UserSearch() *UserSearchAPI {
+func (p *PhabClient) UserSearch() *UserSearchAPI {
 	result := &UserSearchAPI{
 		method: "user.search",
-		client: self,
+		client: p,
 		params: make(url.Values),
 	}
 
-	result.params.Set("api.token", self.token)
+	result.params.Set("api.token", p.token)
 	return result
 }
 
-func (self *UserSearchAPI) Get() []User {
-	var response *UserResponse
+func (p *UserSearchAPI) Get() []User {
+	p.params.Set("order", "oldest")
+	p.params.Set("limit", "100")
+
 	result := []User{}
-
-	self.params.Set("order", "oldest")
-	self.params.Set("limit", "100")
-
 	for {
-		response = &UserResponse{}
-		http_response, err := http.PostForm(self.client.url+self.method, self.params)
+		userResponse := UserResponse{}
+		resp, err := http.PostForm(p.client.url+p.method, p.params)
 		CheckFatal(err)
 
-		body, err := io.ReadAll(http_response.Body)
+		err = json.NewDecoder(resp.Body).Decode(&userResponse)
 		CheckFatal(err)
 
-		err = json.Unmarshal(body, response)
-		CheckFatal(err)
-
-		if response.ErrorCode != "" {
-			panic(response.ErrorInfo)
+		if userResponse.ErrorCode != "" {
+			panic(userResponse.ErrorInfo)
 		}
 
-		result = append(result, response.Result.Users...)
-		http_response.Body.Close()
+		result = append(result, userResponse.Result.Users...)
+		resp.Body.Close()
 
 		fmt.Printf("\rReading phab users: %d", len(result))
 
-		if response.Result.Cursor.After != "" {
-			self.params.Set("after", response.Result.Cursor.After)
+		if userResponse.Result.Cursor.After != "" {
+			p.params.Set("after", userResponse.Result.Cursor.After)
 		} else {
-			self.params.Del("after")
+			p.params.Del("after")
 			break
 		}
 	}
 	fmt.Println()
+
 	return result
 }

@@ -6,20 +6,19 @@ package bugz
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/url"
 	"strconv"
 
 	. "hugpoint.tech/freebsd/forge/util"
 )
 
-func (self *BugzClient) Bugs() *BugsAPI {
+func (b *BugzClient) Bugs() *BugsAPI {
 	result := &BugsAPI{
-		client: self,
+		client: b,
 		params: make(url.Values),
 	}
 
-	result.params.Set("token", self.token)
+	result.params.Set("token", b.token)
 	return result
 }
 
@@ -28,23 +27,19 @@ type BugsAPI struct {
 	params url.Values
 }
 
-func (self *BugsAPI) GetAll() []Bug {
+func (b *BugsAPI) GetAll() []Bug {
 	batch_size := 1000
 	offset := 0
 	result := []Bug{}
-	var bugsResponse *BugsResponse
-	self.params.Set("limit", strconv.Itoa(batch_size))
+	b.params.Set("limit", strconv.Itoa(batch_size))
 
 	for {
-		self.params.Set("offset", strconv.Itoa(offset))
-		bugsResponse = &BugsResponse{}
-		response, err := self.client.http.Get(self.client.url + "/bug?" + self.params.Encode())
+		b.params.Set("offset", strconv.Itoa(offset))
+		bugsResponse := &BugsResponse{}
+		response, err := b.client.http.Get(b.client.url + "/bug?" + b.params.Encode())
 		CheckFatal(err)
 
-		body, err := io.ReadAll(response.Body)
-		CheckFatal(err)
-
-		err = json.Unmarshal(body, &bugsResponse)
+		err = json.NewDecoder(response.Body).Decode(&bugsResponse)
 		CheckFatal(err)
 
 		result = append(result, bugsResponse.Bugs...)
