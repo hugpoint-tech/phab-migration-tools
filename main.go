@@ -3,7 +3,9 @@ package main
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -21,72 +23,16 @@ func main() {
 	CheckFatal(err)
 	defer db.Close()
 
-	_, err = db.Exec(`
-        CREATE TABLE IF NOT EXISTS phab_users (
-            id              INTEGER PRIMARY KEY,
-            type            TEXT,
-            phid            TEXT,
-            username        TEXT,
-            real_name       TEXT,
-            date_created    INTEGER,
-            date_modified   INTEGER,
-            roles           TEXT,
-            policy_edit     TEXT,
-            policy_view     TEXT
-        )
-    `)
-	CheckFatal(err)
+	createTables(db)
 
-	_, err = db.Exec(`
-    		CREATE TABLE IF NOT EXISTS bugs (
-    			id INTEGER PRIMARY KEY,
-    			product TEXT,
-    			status TEXT,
-    			priority TEXT,
-    			severity TEXT,
-    			component TEXT,
-    			platform TEXT,
-    			is_cc_accessible INTEGER,
-    			creation_time TEXT,
-    			resolution TEXT,
-    			is_open INTEGER,
-    			is_creator_accessible INTEGER,
-    			version TEXT,
-    			summary TEXT,
-    			url TEXT,
-    			is_confirmed INTEGER,
-    			last_change_time TEXT,
-    			dupe_of INTEGER,
-    			creator TEXT,
-    			assigned_to TEXT
-    		);
-    	`)
+	getDataFromBugzilla(db)
+	// getPhabricatorData(db)
+}
 
-	_, err = db.Exec(`
-    		CREATE TABLE IF NOT EXISTS bugz_users (
-    			id INTEGER PRIMARY KEY,
-    			email TEXT,
-    			real_name TEXT,
-    			name TEXT
-    		);
-    	`)
-
-	CheckFatal(err)
-
-	if _, err := db.Query("SELECT * from bugz_users"); err != nil {
-		fmt.Println("SELECT * from bugz_users", err)
-		return
-	}
-
-	if _, err := db.Query("SELECT * from bugz_users222"); err != nil {
-		fmt.Println("SELECT * from bugz_users222", err)
-		return
-	}
-
+func getDataFromBugzilla(db *sql.DB) {
 	fmt.Println("Getting data from Bugzilla")
 
 	tn := time.Now().UTC()
-	// bugsStream := make(chan bugz.Bug, 1000)
 	bugzilla := bugz.NewBugzClient()
 	bugs := bugzilla.Bugs().GetAll()
 
@@ -96,7 +42,16 @@ func main() {
 	CheckFatal(err)
 
 	for i, bug := range bugs {
+		fmt.Printf("\rInserting bug into file: %d", i)
+		writeFile(bug)
+	}
+	fmt.Println("finished saving into files", time.Since(tn))
+
+	for i, bug := range bugs {
 		fmt.Printf("\rInserting bug into sql: %d", i)
+
+		// writeFile(bug)
+
 		_, err = tx.Exec(`
 	    	INSERT OR REPLACE INTO bugs (
 	    		id,
@@ -149,27 +104,85 @@ func main() {
 	fmt.Println()
 	tx.Commit()
 
+	fmt.Println("finished in", time.Since(tn))
+}
+
+func createTables(db *sql.DB) {
+	_, err := db.Exec(`
+        CREATE TABLE IF NOT EXISTS phab_users (
+            id              INTEGER PRIMARY KEY,
+            type            TEXT,
+            phid            TEXT,
+            username        TEXT,
+            real_name       TEXT,
+            date_created    INTEGER,
+            date_modified   INTEGER,
+            roles           TEXT,
+            policy_edit     TEXT,
+            policy_view     TEXT
+        )
+    `)
+	CheckFatal(err)
+
+	_, err = db.Exec(`
+    		CREATE TABLE IF NOT EXISTS bugs (
+    			id INTEGER PRIMARY KEY,
+    			product TEXT,
+    			status TEXT,
+    			priority TEXT,
+    			severity TEXT,
+    			component TEXT,
+    			platform TEXT,
+    			is_cc_accessible INTEGER,
+    			creation_time TEXT,
+    			resolution TEXT,
+    			is_open INTEGER,
+    			is_creator_accessible INTEGER,
+    			version TEXT,
+    			summary TEXT,
+    			url TEXT,
+    			is_confirmed INTEGER,
+    			last_change_time TEXT,
+    			dupe_of INTEGER,
+    			creator TEXT,
+    			assigned_to TEXT
+    		);
+    	`)
+	CheckFatal(err)
+
+	_, err = db.Exec(`
+    		CREATE TABLE IF NOT EXISTS bugz_users (
+    			id INTEGER PRIMARY KEY,
+    			email TEXT,
+    			real_name TEXT,
+    			name TEXT
+    		);
+    	`)
+	CheckFatal(err)
+}
+
+func getPhabricatorData(db *sql.DB) {
 	fmt.Println("Getting data from Phabricator")
 	phab := phab.NewPhabClient()
 	users := phab.UserSearch().Get()
 
-	tx, err = db.Begin() // Begin a transaction
+	tx, err := db.Begin() // Begin a transaction
 	CheckFatal(err)
 	stmt, err := tx.Prepare(`
-        INSERT INTO phab_users (
-            id,
-            type,
-            phid,
-            username,
-            real_name,
-            date_created,
-            date_modified,
-            roles,
-            policy_edit,
-            policy_view
-        )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `)
+    INSERT INTO phab_users (
+        id,
+        type,
+        phid,
+        username,
+        real_name,
+        date_created,
+        date_modified,
+        roles,
+        policy_edit,
+        policy_view
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+`)
 	CheckFatal(err)
 	defer stmt.Close()
 
@@ -193,4 +206,12 @@ func main() {
 	}
 	fmt.Println()
 	tx.Commit()
+}
+
+func writeFile(bugData bugz.Bug) {
+	bytes, err := json.Marshal(bugData)
+	CheckFatal(err)
+
+	err = os.WriteFile(fmt.Sprintf("%d.json", bugData.ID), bytes, 0644)
+	CheckFatal(err)
 }

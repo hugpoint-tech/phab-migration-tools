@@ -28,10 +28,11 @@ type BugsAPI struct {
 }
 
 func (b *BugsAPI) GetAll() []Bug {
-	batch_size := 1000
+	batchSize := 1000
+	b.params.Set("limit", strconv.Itoa(batchSize))
+
 	offset := 0
 	result := []Bug{}
-	b.params.Set("limit", strconv.Itoa(batch_size))
 
 	for {
 		b.params.Set("offset", strconv.Itoa(offset))
@@ -44,10 +45,10 @@ func (b *BugsAPI) GetAll() []Bug {
 
 		result = append(result, bugsResponse.Bugs...)
 		fmt.Printf("\rReading bugzilla bugs: %d", len(result))
-		if len(bugsResponse.Bugs) < batch_size {
+		if len(bugsResponse.Bugs) < batchSize {
 			break
 		} else {
-			offset = offset + batch_size
+			offset = offset + batchSize
 		}
 		response.Body.Close()
 	}
