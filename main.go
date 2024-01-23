@@ -23,9 +23,16 @@ func main() {
 	CheckFatal(err)
 	defer db.Close()
 
-	createTables(db)
+	// createTables(db)
+	// getDataFromBugzilla(db)
 
-	getDataFromBugzilla(db)
+	var totalBugs int
+	if err := db.QueryRow("SELECT count(id) from bugs;").Scan(&totalBugs); err != nil {
+		fmt.Println("SELECT id, product, status from bugs", err)
+		return
+	}
+	fmt.Println("totalBugs", totalBugs)
+
 	// getPhabricatorData(db)
 }
 
