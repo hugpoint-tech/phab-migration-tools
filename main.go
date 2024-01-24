@@ -2,10 +2,12 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"time"
 
+	"code.gitea.io/sdk/gitea"
 	"zombiezen.com/go/sqlite"
 	"zombiezen.com/go/sqlite/sqlitex"
 
@@ -14,26 +16,43 @@ import (
 	. "hugpoint.tech/freebsd/forge/util"
 )
 
+var dbpool *sqlitex.Pool
+
 func main() {
 	fmt.Println("Awesome FreeBSD Phabricator to Gitea/Forgejo Migrator 9000")
+	ctx := context.Background()
+
 	tn := time.Now().UTC()
 	defer func() { fmt.Println("main finished in", time.Since(tn)) }()
 
-	conn, err := sqlite.OpenConn("./zombiezen.db", sqlite.OpenReadWrite, sqlite.OpenCreate)
+	var err error
+	dbpool, err = sqlitex.NewPool("./zombiezen.db", sqlitex.PoolOptions{
+		PoolSize: 10,
+	})
 	CheckFatal(err)
-	defer conn.Close()
 
+	conn := dbpool.Get(ctx)
+	if conn == nil {
+		fmt.Println("got nil conn")
+		return
+	}
+	defer dbpool.Put(conn)
+
+	var totalBugsInDB int
 	err = sqlitex.ExecuteTransient(conn, "SELECT count(id) from bugs;", &sqlitex.ExecOptions{
 		ResultFunc: func(stmt *sqlite.Stmt) error {
-			fmt.Println("before search totalBugs", stmt.ColumnText(0))
+			totalBugsInDB = stmt.ColumnInt(0)
+			fmt.Println("before search totalBugsInDB", totalBugsInDB)
 			return nil
 		},
 	})
 	CheckFatal(err)
 
-	createTables(conn)
-	pullConcurrencyLevel := 5
-	getDataFromBugzilla(conn, pullConcurrencyLevel)
+	if totalBugsInDB == 0 {
+		createTables(conn)
+		pullConcurrencyLevel := 5
+		getDataFromBugzilla(conn, pullConcurrencyLevel)
+	}
 
 	err = sqlitex.ExecuteTransient(conn, "SELECT count(id) from bugs;", &sqlitex.ExecOptions{
 		ResultFunc: func(stmt *sqlite.Stmt) error {
@@ -42,6 +61,75 @@ func main() {
 		},
 	})
 	CheckFatal(err)
+
+	stmt := conn.Prep("SELECT id FROM bugs WHERE id = $id;")
+	stmt.SetText("$id", "1")
+	for {
+		if hasRow, err := stmt.Step(); err != nil {
+			CheckFatal(err)
+		} else if !hasRow {
+			break
+		}
+		foo := stmt.GetText("id")
+		fmt.Println("id", foo)
+	}
+
+	gc, err := gitea.NewClient("http://localhost:3000/", gitea.SetBasicAuth("olex.podustov", ".CUXCz.KpBU52PN"))
+	CheckFatal(err)
+
+	existingTokens, resp, err := gc.ListAccessTokens(gitea.ListAccessTokensOptions{})
+	CheckFatal(err)
+
+	fmt.Println("existingTokens", existingTokens)
+	fmt.Println("existingTokens resp", resp)
+	if len(existingTokens) > 0 {
+		fmt.Println("existingTokens 0 - ", existingTokens[0])
+	} else {
+		tkn, resp, err := gc.CreateAccessToken(gitea.CreateAccessTokenOption{
+			Name: "my_tkn",
+			Scopes: []gitea.AccessTokenScope{
+				gitea.AccessTokenScopeAll,
+			},
+		})
+		CheckFatal(err)
+
+		// if err != nil {
+		// 	fmt.Println("tkn err", err) // on repetitive calls don't fail
+		// }
+		fmt.Println("tkn", tkn)
+		fmt.Println("tkn resp", resp)
+	}
+
+	repo, resp, err := gc.CreateRepo(gitea.CreateRepoOption{
+		Name:          "testrepo",
+		Description:   "",
+		Private:       false,
+		IssueLabels:   "",
+		AutoInit:      false,
+		Template:      false,
+		Gitignores:    "",
+		License:       "",
+		Readme:        "",
+		DefaultBranch: "",
+		TrustModel:    "",
+	})
+	CheckFatal(err)
+	fmt.Println("repo", repo)
+	fmt.Println("repo resp", resp)
+
+	iss, resp, err := gc.CreateIssue(repo.Owner.UserName, repo.Name, gitea.CreateIssueOption{
+		Title:     "test_title",
+		Body:      "",
+		Ref:       "",
+		Assignees: []string{},
+		Deadline:  &time.Time{},
+		Milestone: 0,
+		Labels:    []int64{},
+		Closed:    false,
+	})
+	CheckFatal(err)
+	fmt.Println("iss", iss)
+	fmt.Println("iss resp", resp)
 
 	// getPhabricatorData(db)
 }
@@ -117,7 +205,6 @@ func getDataFromBugzilla(conn *sqlite.Conn, pullConcurrencyLevel int) {
 		)
 		CheckFatal(err)
 	}
-
 }
 
 func createTables(conn *sqlite.Conn) {
