@@ -4,6 +4,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -74,7 +75,16 @@ func main() {
 		fmt.Println("id", foo)
 	}
 
-	gc, err := gitea.NewClient("http://localhost:3000/", gitea.SetBasicAuth("olex.podustov", ".CUXCz.KpBU52PN"))
+	giteaLogin, ok := os.LookupEnv("GITEA_LOGIN")
+	if !ok {
+		panic("GITEA_LOGIN is not set")
+	}
+	giteaPassword, ok := os.LookupEnv("GITEA_PASSWORD")
+	if !ok {
+		panic("GITEA_PASSWORD is not set")
+	}
+
+	gc, err := gitea.NewClient("http://localhost:3000/", gitea.SetBasicAuth(giteaLogin, giteaPassword))
 	CheckFatal(err)
 
 	existingTokens, resp, err := gc.ListAccessTokens(gitea.ListAccessTokensOptions{})
