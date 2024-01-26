@@ -3,6 +3,7 @@ package bugz
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"net/url"
 	"os"
 	"strconv"
@@ -23,42 +24,45 @@ func (u *BugzClient) UserAPI() *UserAPI {
 	return result
 }
 
-func (u *UserAPI) Get(chanUsers chan User) error {
-	offset := 0
-	batchSize := 1000
-	offset += batchSize
+func (u *UserAPI) Get(chanDone chan struct{}, chanUsers chan User) error {
+	// offset := 0
+	// batchSize := 50
 
-	u.params.Set("match", "*")
-	u.params.Set("limit", strconv.Itoa(batchSize))
-	u.params.Set("offset", strconv.Itoa(offset))
+	iterator := 0
+	for {
+		// u.params.Set("offset", strconv.Itoa(offset))
+		// u.params.Set("limit", strconv.Itoa(batchSize))
+		// u.params.Set("match", "*")
+		u.params.Set("ids", strconv.Itoa(iterator))
 
-	response, err := u.client.http.Get(u.client.url + "/user?" + u.params.Encode())
-	if err != nil {
-		return err
-	}
+		url := u.client.url + "/user?" + u.params.Encode()
+		// fmt.Println("Get url", url)
+		response, err := u.client.http.Get(url)
+		if err != nil {
+			return err
+		}
 
-	var result UsersResponse
-	if err := json.NewDecoder(response.Body).Decode(&result); err != nil {
-		return err
-	}
+		var result UsersResponse
+		if err := json.NewDecoder(response.Body).Decode(&result); err != nil {
+			return err
+		}
+		if err := writeUsersToFiles("../bsdata/bugzilla-users", result.Users...); err != nil {
+			return err
+		}
 
-	if err := writeUsersToFiles("bugzilla-users", result.Users...); err != nil {
-		return err
-	}
+		fmt.Printf("\rReading bugzilla users begin, current iterator: %d %d", iterator, len(result.Users))
+		fmt.Println(result)
 
-	// var buf bytes.Buffer
-	// newReader := io.TeeReader(response.Body, &buf)
-	// bytes, err := io.ReadAll(&buf)
-	// if err != nil {
-	// 	return err
-	// }
-	// fmt.Println("user data", string(bytes))
+		for _, v := range result.Users {
+			chanUsers <- v
+		}
 
-	fmt.Println("len(result.Users) - ", len(result.Users))
-	fmt.Println(result)
+		if iterator > math.MaxInt-10 {
+			close(chanDone)
+			break
+		}
 
-	for _, v := range result.Users {
-		chanUsers <- v
+		iterator++
 	}
 
 	return nil
@@ -72,7 +76,7 @@ func writeUsersToFiles(folder string, instances ...User) error {
 			return err
 		}
 
-		if err := os.WriteFile(fmt.Sprintf("./%s/%d.json", folder, data.ID), bytes, 0o644); err != nil {
+		if err := os.WriteFile(fmt.Sprintf("%s/%d.json", folder, data.ID), bytes, 0o644); err != nil {
 			return err
 		}
 	}

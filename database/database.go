@@ -3,11 +3,13 @@ package database
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"zombiezen.com/go/sqlite"
 	"zombiezen.com/go/sqlite/sqlitex"
 
 	"hugpoint.tech/freebsd/forge/bugz"
+	"hugpoint.tech/freebsd/forge/phab"
 )
 
 type DB struct {
@@ -27,15 +29,17 @@ func New(ctx context.Context, dbPath string) (*DB, error) {
 		return nil, fmt.Errorf("new got nil conn")
 	}
 	defer dbpool.Put(conn)
-	defer fmt.Println()
-	createTables(conn)
+
+	if err := createTables(conn); err != nil {
+		return nil, err
+	}
 
 	return &DB{
 		pool: dbpool,
 	}, nil
 }
 
-func (db *DB) GetUsersCount(ctx context.Context) (int, error) {
+func (db *DB) GetUsersTotal(ctx context.Context) (int, error) {
 	conn := db.pool.Get(ctx)
 	if conn == nil {
 		return 0, fmt.Errorf("get total users got nil conn")
@@ -47,7 +51,7 @@ func (db *DB) GetUsersCount(ctx context.Context) (int, error) {
 	err := sqlitex.ExecuteTransient(conn, "SELECT count(id) from bugz_users;", &sqlitex.ExecOptions{
 		ResultFunc: func(stmt *sqlite.Stmt) error {
 			totalUsersInDB = stmt.ColumnInt(0)
-			fmt.Println("get total users totalBugsInDB", totalUsersInDB)
+			// fmt.Println("get total users totalBugsInDB", totalUsersInDB)
 			return nil
 		},
 	})
@@ -97,6 +101,34 @@ func (db *DB) GetUsers(ctx context.Context) ([]bugz.User, error) {
 	return result, nil
 }
 
+func (db *DB) GetUsersFromBugs(ctx context.Context, chanUsers chan bugz.User) error {
+	conn := db.pool.Get(ctx)
+	if conn == nil {
+		return fmt.Errorf("get users from bugs - got nil conn")
+	}
+	defer db.pool.Put(conn)
+	defer fmt.Println()
+
+	err := sqlitex.ExecuteTransient(conn, `
+	SELECT creator
+	FROM bugs LIMIT 1122;`, &sqlitex.ExecOptions{
+		ResultFunc: func(stmt *sqlite.Stmt) error {
+			fmt.Println("get bugs id dupe_of", stmt.ColumnInt(0), stmt.ColumnInt(1))
+
+			usr := bugz.User{
+				Email: stmt.GetText("creator"),
+			}
+
+			chanUsers <- usr
+			return nil
+		},
+	})
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func (db *DB) CreateUsers(ctx context.Context, chanUsers chan bugz.User) error {
 	conn := db.pool.Get(ctx)
 	if conn == nil {
@@ -137,7 +169,7 @@ func (db *DB) CreateUsers(ctx context.Context, chanUsers chan bugz.User) error {
 	return nil
 }
 
-func (db *DB) GetTotalBugs(ctx context.Context) (int, error) {
+func (db *DB) GetBugsTotal(ctx context.Context) (int, error) {
 	conn := db.pool.Get(ctx)
 	if conn == nil {
 		return 0, fmt.Errorf("get total bugs got nil conn")
@@ -149,7 +181,7 @@ func (db *DB) GetTotalBugs(ctx context.Context) (int, error) {
 	err := sqlitex.ExecuteTransient(conn, "SELECT count(id) from bugs;", &sqlitex.ExecOptions{
 		ResultFunc: func(stmt *sqlite.Stmt) error {
 			totalBugsInDB = stmt.ColumnInt(0)
-			fmt.Println("get total bugs totalBugsInDB", totalBugsInDB)
+			// fmt.Println("get total bugs totalBugsInDB", totalBugsInDB)
 			return nil
 		},
 	})
@@ -305,7 +337,60 @@ func (db *DB) CreateBugs(ctx context.Context, chanBug <-chan bugz.Bug) error {
 	return nil
 }
 
-// it's important to have no trailing whitespaces at the end of the stmt, because error will happen
+func (db *DB) GetPhabricatorData(ctx context.Context) error {
+	fmt.Println("Getting data from Phabricator")
+	phab := phab.NewPhabClient()
+	users := phab.UserSearch().Get()
+
+	conn := db.pool.Get(ctx)
+	if conn == nil {
+		return fmt.Errorf("get phabricator data - got nil conn")
+	}
+	defer db.pool.Put(conn)
+	defer fmt.Println()
+
+	for i, user := range users {
+		fmt.Printf("\rInserting phab user into sql: %d", i)
+
+		err := sqlitex.ExecuteTransient(
+			conn,
+			`  INSERT INTO phab_users (
+				id,
+				type,
+				phid,
+				username,
+				real_name,
+				date_created,
+				date_modified,
+				roles,
+				policy_edit,
+				policy_view
+			)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+			&sqlitex.ExecOptions{
+				Args: []any{
+					user.ID,
+					user.Type,
+					user.Phid,
+					user.Fields.Username,
+					user.Fields.RealName,
+					user.Fields.DateCreated,
+					user.Fields.DateModified,
+					strings.Join(user.Fields.Roles, ","),
+					user.Fields.Policy.Edit,
+					user.Fields.Policy.View,
+				},
+			},
+		)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// it's important to have no trailing whitespaces at the end of the stmt, because error will happen.
 func createTables(conn *sqlite.Conn) error {
 	err := sqlitex.ExecuteTransient(conn, `
 	CREATE TABLE IF NOT EXISTS bugz_users (
