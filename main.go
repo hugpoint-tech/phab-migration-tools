@@ -40,7 +40,7 @@ func main() {
 
 	{ // users block
 		chanUsrs := make(chan bugz.User, 100*1000)
-		getUsersFromBugzilla(chanUsrs)
+		getUsersFromBugzilla(ctx, chanUsrs)
 		err = db.CreateUsers(ctx, chanUsrs)
 		CheckFatal("db.CreateUsers", err)
 
@@ -88,7 +88,7 @@ func getBugsFromBugzilla(pullConcurrencyLevel int, chanBug chan bugz.Bug) {
 	}()
 }
 
-func getUsersFromBugzilla(chanUsrs chan bugz.User) {
+func getUsersFromBugzilla(ctx context.Context, chanUsrs chan bugz.User) {
 	tn := time.Now().UTC()
 	fmt.Println("getting users from Bugzilla start", tn.String())
 	defer func() { fmt.Println("getUsersFromBugzilla finished in", time.Since(tn)) }()
@@ -96,7 +96,7 @@ func getUsersFromBugzilla(chanUsrs chan bugz.User) {
 	chanDone := make(chan struct{})
 	bugzilla := bugz.NewBugzClient()
 	go func() {
-		err := bugzilla.UserAPI().Get(chanDone, chanUsrs)
+		err := bugzilla.UserAPI().Get(ctx, chanDone, chanUsrs)
 		CheckFatal("bugzilla.UserAPI().Get()", err)
 	}()
 

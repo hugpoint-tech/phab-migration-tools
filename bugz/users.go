@@ -1,9 +1,11 @@
 package bugz
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"math"
+	"net/http"
 	"net/url"
 	"os"
 	"strconv"
@@ -24,20 +26,16 @@ func (u *BugzClient) UserAPI() *UserAPI {
 	return result
 }
 
-func (u *UserAPI) Get(chanDone chan struct{}, chanUsers chan User) error {
-	// offset := 0
-	// batchSize := 50
-
+func (u *UserAPI) Get(ctx context.Context, chanDone chan struct{}, chanUsers chan User) error {
 	iterator := 0
 	for {
-		// u.params.Set("offset", strconv.Itoa(offset))
-		// u.params.Set("limit", strconv.Itoa(batchSize))
-		// u.params.Set("match", "*")
 		u.params.Set("ids", strconv.Itoa(iterator))
-
 		url := u.client.url + "/user?" + u.params.Encode()
-		// fmt.Println("Get url", url)
-		response, err := u.client.http.Get(url)
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+		if err != nil {
+			return err
+		}
+		response, err := u.client.http.Do(req)
 		if err != nil {
 			return err
 		}
@@ -50,8 +48,7 @@ func (u *UserAPI) Get(chanDone chan struct{}, chanUsers chan User) error {
 			return err
 		}
 
-		fmt.Printf("\rReading bugzilla users begin, current iterator: %d %d", iterator, len(result.Users))
-		fmt.Println(result)
+		fmt.Printf("\rReading bugzilla users begin, current iterator: %d len %d status %d result %+v", iterator, len(result.Users), response.StatusCode, result)
 
 		for _, v := range result.Users {
 			chanUsers <- v
