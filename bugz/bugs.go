@@ -67,12 +67,12 @@ func (b *BugsAPI) getBugs(chanDone chan struct{}, chanBug chan Bug, offset int) 
 
 	bugzilla := NewBugzClient()
 	response, err := bugzilla.http.Get(url + "/bug?" + params)
-	CheckFatal(err)
+	CheckFatal("getBugs bugzilla.http.Get", err)
 	defer response.Body.Close()
 
 	bugsResponse := &BugsResponse{}
 	err = json.NewDecoder(response.Body).Decode(&bugsResponse)
-	CheckFatal(err)
+	CheckFatal("getBugs", err)
 
 	for _, v := range bugsResponse.Bugs {
 		chanBug <- v

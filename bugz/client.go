@@ -46,20 +46,20 @@ func NewBugzClient() BugzClient {
 	formData.Set("password", password)
 
 	response, err := bugz.http.Get(bugz.url + "/login?" + formData.Encode())
-	CheckFatal(err)
+	CheckFatal("NewBugzClient bugz.http.Get", err)
 	defer response.Body.Close()
 
 	if response.StatusCode != http.StatusOK {
-		CheckFatal(fmt.Errorf("login failed, status code: %d", response.StatusCode))
+		CheckFatal("NewBugzClient", fmt.Errorf("login failed, status code: %d", response.StatusCode))
 	}
 
 	if err := json.NewDecoder(response.Body).Decode(&loginResponse); err != nil {
-		CheckFatal(fmt.Errorf("error reading bugzilla login response body: %w", err))
+		CheckFatal("NewBugzClient", fmt.Errorf("error reading bugzilla login response body: %w", err))
 	}
 
 	if loginResponse.Token == "" {
 		err = fmt.Errorf("login token is empty")
-		CheckFatal(err)
+		CheckFatal("NewBugzClient loginResponse.Token", err)
 	}
 	bugz.token = loginResponse.Token
 

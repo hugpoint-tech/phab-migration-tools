@@ -34,10 +34,10 @@ func (p *UserSearchAPI) Get() []User {
 	for {
 		userResponse := UserResponse{}
 		resp, err := http.PostForm(p.client.url+p.method, p.params)
-		CheckFatal(err)
+		CheckFatal("UserSearchAPI get", err)
 
 		err = json.NewDecoder(resp.Body).Decode(&userResponse)
-		CheckFatal(err)
+		CheckFatal("UserSearchAPI get", err)
 
 		if userResponse.ErrorCode != "" {
 			panic(userResponse.ErrorInfo)

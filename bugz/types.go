@@ -46,3 +46,21 @@ type UserDetail struct {
 type BugsResponse struct {
 	Bugs []Bug `json:"bugs"`
 }
+
+type UsersResponse struct {
+	Users []User `json:"users"`
+}
+type User struct {
+	ID       int     `json:"id"`
+	Email    string  `json:"email"`
+	Name     string  `json:"name"`
+	CanLogin bool    `json:"can_login"`
+	RealName string  `json:"real_name"`
+	Groups   []Group `json:"groups"`
+}
+
+type Group struct {
+	ID          int    `json:"id"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+}
