@@ -66,7 +66,7 @@ func (c *Client) CreateUsers(users []bugz.User) error {
 		usr, resp, err := c.gc.AdminCreateUser(gitea.CreateUserOption{
 			SourceID:           int64(user.ID),
 			LoginName:          user.Name,
-			Username:           user.Name, // in bugzilla it mainly matches - although - response field name - The login name of the user. Note that in some situations this is different than their email. https://bugzilla.readthedocs.io/en/latest/api/core/v1/user.html
+			Username:           user.RealName, // in bugzilla it mainly matches - although - response field name - The login name of the user. Note that in some situations this is different than their email.
 			FullName:           user.RealName,
 			Email:              user.Email,
 			Password:           "", // of course we don't have password from bugzilla

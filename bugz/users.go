@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
-	"net/http"
 	"net/url"
 	"os"
 	"strconv"
@@ -26,16 +25,13 @@ func (u *BugzClient) UserAPI() *UserAPI {
 	return result
 }
 
-func (u *UserAPI) Get(ctx context.Context, chanDone chan struct{}, chanUsers chan User) error {
-	iterator := 0
+func (u *UserAPI) Get(ctx context.Context, startIndex int, chanDone chan struct{}, chanUsers chan User) error {
+	statistics := make(map[int]int)
+	defer func() { fmt.Println("response code statistics", statistics) }()
+
 	for {
-		u.params.Set("ids", strconv.Itoa(iterator))
-		url := u.client.url + "/user?" + u.params.Encode()
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-		if err != nil {
-			return err
-		}
-		response, err := u.client.http.Do(req)
+		u.params.Set("ids", strconv.Itoa(startIndex))
+		response, err := u.client.http.Get(u.client.url + "/user?" + u.params.Encode())
 		if err != nil {
 			return err
 		}
@@ -48,26 +44,27 @@ func (u *UserAPI) Get(ctx context.Context, chanDone chan struct{}, chanUsers cha
 			return err
 		}
 
-		fmt.Printf("\rReading bugzilla users begin, current iterator: %d len %d status %d result %+v", iterator, len(result.Users), response.StatusCode, result)
+		statistics[response.StatusCode]++
+		fmt.Printf("\rReading bugzilla users begin, current startIndex: %d len %d status %d", startIndex, len(result.Users), response.StatusCode)
 
 		for _, v := range result.Users {
 			chanUsers <- v
 		}
 
-		if iterator > math.MaxInt-10 {
+		if startIndex > math.MaxInt-10 {
 			close(chanDone)
 			break
 		}
 
-		iterator++
+		startIndex++
 	}
 
 	return nil
 }
 
 func writeUsersToFiles(folder string, instances ...User) error {
-	for i, data := range instances {
-		fmt.Printf("\rInserting user into file: %d", i)
+	for _, data := range instances {
+		fmt.Println("Inserting user into file:", data.ID)
 		bytes, err := json.Marshal(data)
 		if err != nil {
 			return err

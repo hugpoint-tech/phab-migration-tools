@@ -2,6 +2,7 @@ package database
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -62,6 +63,28 @@ func (db *DB) GetUsersTotal(ctx context.Context) (int, error) {
 	return totalUsersInDB, nil
 }
 
+func (db *DB) GetUsersMaxID(ctx context.Context) (int, error) {
+	conn := db.pool.Get(ctx)
+	if conn == nil {
+		return 0, fmt.Errorf("get max user id - got nil conn")
+	}
+	defer db.pool.Put(conn)
+	defer fmt.Println()
+
+	var maxUserID int
+	err := sqlitex.ExecuteTransient(conn, "SELECT max(id) from bugz_users;", &sqlitex.ExecOptions{
+		ResultFunc: func(stmt *sqlite.Stmt) error {
+			maxUserID = stmt.ColumnInt(0)
+			return nil
+		},
+	})
+	if err != nil {
+		return 0, err
+	}
+
+	return maxUserID, nil
+}
+
 func (db *DB) GetUsers(ctx context.Context) ([]bugz.User, error) {
 	conn := db.pool.Get(ctx)
 	if conn == nil {
@@ -78,9 +101,9 @@ func (db *DB) GetUsers(ctx context.Context) ([]bugz.User, error) {
 		name,
 		can_login,
 		real_name
-	FROM bugz_users LIMIT 11;`, &sqlitex.ExecOptions{
+	FROM bugz_users;`, &sqlitex.ExecOptions{
 		ResultFunc: func(stmt *sqlite.Stmt) error {
-			fmt.Println("get bugz_users id", stmt.ColumnInt(0))
+			// fmt.Println("get bugz_users id", stmt.ColumnInt(0))
 
 			usr := bugz.User{
 				ID:       stmt.ColumnInt(0),
@@ -109,17 +132,33 @@ func (db *DB) GetUsersFromBugs(ctx context.Context, chanUsers chan bugz.User) er
 	defer db.pool.Put(conn)
 	defer fmt.Println()
 
-	err := sqlitex.ExecuteTransient(conn, `
-	SELECT creator
-	FROM bugs LIMIT 1122;`, &sqlitex.ExecOptions{
-		ResultFunc: func(stmt *sqlite.Stmt) error {
-			fmt.Println("get bugs id dupe_of", stmt.ColumnInt(0), stmt.ColumnInt(1))
+	filter := make(map[int]struct{})
+	defer func() { fmt.Println("GetUsersFromBugs filter", len(filter)) }()
 
-			usr := bugz.User{
-				Email: stmt.GetText("creator"),
+	err := sqlitex.ExecuteTransient(conn, `SELECT creator_detail FROM bugs;`, &sqlitex.ExecOptions{
+		ResultFunc: func(stmt *sqlite.Stmt) error {
+			cd := stmt.GetText("creator_detail")
+
+			var bu bugz.UserDetail
+			if err := json.Unmarshal([]byte(cd), &bu); err != nil {
+				return err
 			}
 
-			chanUsers <- usr
+			usr := bugz.User{
+				ID:       bu.ID,
+				Email:    bu.Email,
+				Name:     bu.Name,
+				CanLogin: true,
+				RealName: bu.RealName,
+				// Groups:   []bugz.Group{},
+			}
+
+			if _, ok := filter[usr.ID]; !ok {
+				// fmt.Println("GetUsersFromBugs creator_detail", cd)
+				chanUsers <- usr
+			}
+			filter[usr.ID] = struct{}{}
+
 			return nil
 		},
 	})
@@ -140,7 +179,7 @@ func (db *DB) CreateUsers(ctx context.Context, chanUsers chan bugz.User) error {
 	var i int
 	for user := range chanUsers {
 		i++
-		fmt.Printf("\rInserting user into sql: %d", i)
+		fmt.Printf("\rInserting user into sql: %d user.ID %d", i, user.ID)
 
 		err := sqlitex.ExecuteTransient(
 			conn,
@@ -220,10 +259,17 @@ func (db *DB) GetBugs(ctx context.Context, bugsChan chan bugz.Bug) error {
 		is_confirmed,
 		last_change_time,
 		creator,
+		creator_detail,
 		assigned_to
-	FROM bugs LIMIT 11;`, &sqlitex.ExecOptions{
+	FROM bugs;`, &sqlitex.ExecOptions{
 		ResultFunc: func(stmt *sqlite.Stmt) error {
 			fmt.Println("get bugs id dupe_of", stmt.ColumnInt(0), stmt.ColumnInt(1))
+
+			cd := stmt.GetText("creator_detail")
+			var creatorDetail bugz.UserDetail
+			if err := json.Unmarshal([]byte(cd), &creatorDetail); err != nil {
+				return err
+			}
 
 			bug := bugz.Bug{
 				ID:                  stmt.ColumnInt(0),
@@ -251,7 +297,7 @@ func (db *DB) GetBugs(ctx context.Context, bugsChan chan bugz.Bug) error {
 				Flags:               []interface{}{},
 				DupeOf:              stmt.ColumnInt(1),
 				Creator:             stmt.GetText("creator"),
-				CreatorDetail:       bugz.UserDetail{},
+				CreatorDetail:       creatorDetail,
 				AssignedTo:          stmt.GetText("assigned_to"),
 				AssignedToDetail:    bugz.UserDetail{},
 				CC:                  []string{},
@@ -282,7 +328,12 @@ func (db *DB) CreateBugs(ctx context.Context, chanBug <-chan bugz.Bug) error {
 		i++
 		fmt.Printf("\rInserting bug into sql: %d", i)
 
-		err := sqlitex.ExecuteTransient(
+		bcd, err := json.Marshal(bug.CreatorDetail)
+		if err != nil {
+			return err
+		}
+
+		err = sqlitex.ExecuteTransient(
 			conn,
 			`INSERT OR REPLACE INTO bugs (
 				id,
@@ -303,8 +354,9 @@ func (db *DB) CreateBugs(ctx context.Context, chanBug <-chan bugz.Bug) error {
 				last_change_time,
 				dupe_of,
 				creator,
+				creator_detail,
 				assigned_to
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
 			&sqlitex.ExecOptions{
 				Args: []any{
 					bug.ID,
@@ -325,6 +377,7 @@ func (db *DB) CreateBugs(ctx context.Context, chanBug <-chan bugz.Bug) error {
 					bug.LastChangeTime,
 					bug.DupeOf,
 					bug.Creator,
+					string(bcd),
 					bug.AssignedTo,
 				},
 			},
@@ -404,6 +457,11 @@ func createTables(conn *sqlite.Conn) error {
 		return err
 	}
 
+	// err = sqlitex.ExecuteTransient(conn, `DROP TABLE bugs;`, nil)
+	// if err != nil {
+	// 	return err
+	// }
+
 	err = sqlitex.ExecuteTransient(conn, `
 	CREATE TABLE IF NOT EXISTS bugs (
 		id INTEGER PRIMARY KEY,
@@ -425,6 +483,7 @@ func createTables(conn *sqlite.Conn) error {
 		last_change_time TEXT,
 		dupe_of INTEGER,
 		creator TEXT,
+		creator_detail TEXT,
 		assigned_to TEXT
 	);`, nil)
 	if err != nil {
