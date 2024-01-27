@@ -263,7 +263,7 @@ func (db *DB) GetBugs(ctx context.Context, bugsChan chan bugz.Bug) error {
 		assigned_to
 	FROM bugs;`, &sqlitex.ExecOptions{
 		ResultFunc: func(stmt *sqlite.Stmt) error {
-			fmt.Println("get bugs id dupe_of", stmt.ColumnInt(0), stmt.ColumnInt(1))
+			// fmt.Println("get bugs id dupe_of", stmt.ColumnInt(0), stmt.ColumnInt(1))
 
 			cd := stmt.GetText("creator_detail")
 			var creatorDetail bugz.UserDetail

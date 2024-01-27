@@ -63,42 +63,45 @@ func main() {
 
 	{ // users block
 		chanUsrs := make(chan bugz.User, 100*1000)
-		// go getUsersFromBugzilla(ctx, maxUserID, chanUsrs)
 
-		err = db.GetUsersFromBugs(ctx, chanUsrs)
-		CheckFatal("db.GetUsersFromBugs", err)
-		time.Sleep(11 * time.Second)
-		close(chanUsrs)
 		go func() {
-			err = db.CreateUsers(ctx, chanUsrs)
-			CheckFatal("db.CreateUsers", err)
+			err = db.GetUsersFromBugs(ctx, chanUsrs)
+			CheckFatal("db.GetUsersFromBugs", err)
+			time.Sleep(11 * time.Second)
+			close(chanUsrs)
 		}()
+
+		err = db.CreateUsers(ctx, chanUsrs)
+		CheckFatal("db.CreateUsers", err)
 
 		users, err := db.GetUsers(ctx) // https://bugzilla.readthedocs.io/en/latest/api/core/v1/user.html
 		CheckFatal("db.GetUsers", err)
-		fmt.Println("db.GetUsers users", len(users))
+		fmt.Println("got users from db from bugs", len(users))
 
 		{ // gitea block - create users
+			err = gc.DeleteAll(users)
+			CheckFatal("DeleteAll", err)
+
 			err = gc.CreateUsers(users)
 			CheckFatal("gc.CreateUsers", err)
 		}
 	}
 
-	// if false { // bugs block
-	// 	bugsChan := make(chan bugz.Bug, 300*1000)
-	// 	go func() {
-	// 		err = db.GetBugs(ctx, bugsChan)
-	// 		CheckFatal("db.GetBugs", err)
-	// 		time.Sleep(1 * time.Minute)
-	// 		close(bugsChan)
-	// 	}()
-	// 	{ // gitea block
-	// 		// err = gc.CreateBugz(bugsChan)
-	// 		// CheckFatal("gc.CreateBugz", err)
-	// 	}
-	// }
-	// err = db.GetPhabricatorData(ctx)
-	// CheckFatal("getPhabricatorData", err)
+	{ // bugs block
+		bugsChan := make(chan bugz.Bug, 300*1000)
+		go func() {
+			err = db.GetBugs(ctx, bugsChan)
+			CheckFatal("db.GetBugs", err)
+			time.Sleep(11 * time.Second)
+			close(bugsChan)
+		}()
+		{ // gitea block
+			err = gc.CreateBugz(bugsChan)
+			CheckFatal("gc.CreateBugz", err)
+		}
+	}
+	err = db.GetPhabricatorData(ctx)
+	CheckFatal("getPhabricatorData", err)
 }
 
 func getBugsFromBugzilla(pullConcurrencyLevel int, chanBug chan bugz.Bug) {
@@ -116,24 +119,6 @@ func getBugsFromBugzilla(pullConcurrencyLevel int, chanBug chan bugz.Bug) {
 		time.Sleep(1 * time.Minute) // wait a bit for all http clients read data and put it into chanBug
 		close(chanBug)
 	}()
-}
-
-func getUsersFromBugzilla(ctx context.Context, maxUserID int, chanUsrs chan bugz.User) {
-	tn := time.Now().UTC()
-	fmt.Println("getting users from Bugzilla start", tn.String())
-	defer func() { fmt.Println("getUsersFromBugzilla finished in", time.Since(tn)) }()
-
-	chanDone := make(chan struct{})
-	bugzilla := bugz.NewBugzClient()
-	go func() {
-		err := bugzilla.UserAPI().Get(ctx, maxUserID, chanDone, chanUsrs)
-		CheckFatal("bugzilla.UserAPI().Get()", err)
-	}()
-
-	<-chanDone
-	fmt.Println("got bugs in", time.Since(tn))
-	time.Sleep(1 * time.Second) // wait a bit
-	close(chanUsrs)
 }
 
 func readBugsFromFiles(ctx context.Context, chanBug chan bugz.Bug) error {

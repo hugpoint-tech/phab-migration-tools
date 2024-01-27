@@ -63,8 +63,8 @@ func (c *Client) CreateBugz(bugsChan <-chan bugz.Bug) error {
 func (c *Client) CreateUsers(users []bugz.User) error {
 	visibility := gitea.VisibleTypePublic
 	for _, user := range users {
-		usr, resp, err := c.gc.AdminCreateUser(gitea.CreateUserOption{
-			SourceID:           int64(user.ID),
+		usr, _, err := c.gc.AdminCreateUser(gitea.CreateUserOption{
+			SourceID:           0,
 			LoginName:          user.Name,
 			Username:           user.RealName, // in bugzilla it mainly matches - although - response field name - The login name of the user. Note that in some situations this is different than their email.
 			FullName:           user.RealName,
@@ -75,10 +75,21 @@ func (c *Client) CreateUsers(users []bugz.User) error {
 			Visibility:         &visibility, // Public, Limited, Private
 		})
 		if err != nil {
-			return fmt.Errorf("user %+v err %w", user, err)
+			// return fmt.Errorf("user %+v err %w", user, err)
+			fmt.Printf("gitea create user %+v err %v\n", user, err)
 		}
 		fmt.Println("gitea create user", usr)
-		fmt.Println("gitea create user resp", resp)
+	}
+
+	return nil
+}
+
+func (c *Client) DeleteAll(users []bugz.User) error {
+	for _, user := range users {
+		_, err := c.gc.AdminDeleteUser(user.Name)
+		if err != nil {
+			fmt.Printf("gitea delete user %+v err %v\n", user, err)
+		}
 	}
 
 	return nil
