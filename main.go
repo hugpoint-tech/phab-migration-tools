@@ -28,10 +28,14 @@ func main() {
 	}
 }
 
-func printHelp() {
-	fmt.Println("display available commands")
+func printHelp() { // not sure about functions descriptions
+	fmt.Println("available commands:\n" +
+		"bugzilla-download-bugs - downloads bugs from bugzilla\n" +
+		"bugzilla-show-bugs - shows bugzilla bugs\n" +
+		"bugzilla-list-bugs - displays downloaded bugs\n" +
+		"bugzilla-download-users - downloads users from bugzilla\n" +
+		"help - shows available commands")
 }
-
 func downloadBugs() {
 	fmt.Println("downloading bugs")
 }
