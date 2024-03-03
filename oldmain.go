@@ -9,6 +9,8 @@ import (
 	"os"
 	"os/signal"
 	"time"
+
+	. "hugpoint.tech/freebsd/forge/util"
 )
 
 func oldmain() {
