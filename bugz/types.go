@@ -1,46 +1,49 @@
 package bugz
 
+// Bug represents bug data
 type Bug struct {
-	ID                  int           `json:"id"`
-	Product             string        `json:"product"`
-	Status              string        `json:"status"`
-	Priority            string        `json:"priority"`
-	Severity            string        `json:"severity"`
-	Component           string        `json:"component"`
-	Platform            string        `json:"platform"`
-	IsCCAccessible      bool          `json:"is_cc_accessible"`
-	Blocks              []int         `json:"blocks"`
-	DependsOn           []int         `json:"depends_on"`
-	CreationTime        string        `json:"creation_time"`
-	Resolution          string        `json:"resolution"`
-	SeeAlso             []string      `json:"see_also"`
-	Keywords            []string      `json:"keywords"`
-	IsCreatorAccessible bool          `json:"is_creator_accessible"`
-	Version             string        `json:"version"`
-	Summary             string        `json:"summary"`
-	URL                 string        `json:"url"`
-	Groups              []string      `json:"groups"`
-	Alias               []string      `json:"alias"`
-	IsConfirmed         bool          `json:"is_confirmed"`
-	LastChangeTime      string        `json:"last_change_time"`
-	Flags               []interface{} `json:"flags"`
-	DupeOf              int           `json:"dupe_of"`
-
-	Creator       string     `json:"creator"`
-	CreatorDetail UserDetail `json:"creator_detail"`
-
-	AssignedTo       string     `json:"assigned_to"`
-	AssignedToDetail UserDetail `json:"assigned_to_detail"`
-
-	CC       []string     `json:"cc"`
-	CCDetail []UserDetail `json:"cc_detail"`
-}
-
-type UserDetail struct {
-	ID       int    `json:"id"`
-	Email    string `json:"email"`
-	RealName string `json:"real_name"`
-	Name     string `json:"name"`
+	ActualTime          string   `json:"actual_time"`
+	Alias               []string `json:"alias"`
+	AssignedTo          string   `json:"assigned_to"`
+	AssignedToDetail    User     `json:"assigned_to_detail"`
+	Blocks              []int    `json:"blocks"`
+	CC                  []string `json:"cc"`
+	CCDetail            []User   `json:"cc_detail"`
+	Classification      string   `json:"classification"`
+	Component           string   `json:"component"`
+	CreationTime        string   `json:"creation_time"`
+	Creator             string   `json:"creator"`
+	CreatorDetail       User     `json:"creator_detail"`
+	Deadline            string   `json:"deadline"`
+	DependsOn           []int    `json:"depends_on"`
+	DupeOf              int      `json:"dupe_of"`
+	EstimatedTime       string   `json:"estimated_time"`
+	Flags               []Flag   `json:"flags"`
+	Groups              []string `json:"groups"`
+	ID                  int      `json:"id"`
+	IsCCAccessible      bool     `json:"is_cc_accessible"`
+	IsConfirmed         bool     `json:"is_confirmed"`
+	IsOpen              bool     `json:"is_open"`
+	IsCreatorAccessible bool     `json:"is_creator_accessible"`
+	Keywords            []string `json:"keywords"`
+	LastChangeTime      string   `json:"last_change_time"`
+	OpSys               string   `json:"op_sys"`
+	Platform            string   `json:"platform"`
+	Priority            string   `json:"priority"`
+	Product             string   `json:"product"`
+	QAContact           string   `json:"qa_contact"`
+	QAContactDetail     User     `json:"qa_contact_detail"`
+	RemainingTime       string   `json:"remaining_time"`
+	Resolution          string   `json:"resolution"`
+	SeeAlso             []string `json:"see_also"`
+	Severity            string   `json:"severity"`
+	Status              string   `json:"status"`
+	Summary             string   `json:"summary"`
+	TargetMilestone     string   `json:"target_milestone"`
+	UpdateToken         string   `json:"update_token"`
+	URL                 string   `json:"url"`
+	Version             string   `json:"version"`
+	Whiteboard          string   `json:"whiteboard"`
 }
 
 type BugsResponse struct {
@@ -50,6 +53,8 @@ type BugsResponse struct {
 type UsersResponse struct {
 	Users []User `json:"users"`
 }
+
+// User represents user data
 type User struct {
 	ID       int     `json:"id"`
 	Email    string  `json:"email"`
@@ -63,4 +68,16 @@ type Group struct {
 	ID          int    `json:"id"`
 	Name        string `json:"name"`
 	Description string `json:"description"`
+}
+
+// Flag represents flag data
+type Flag struct {
+	ID               int    `json:"id"`
+	Name             string `json:"name"`
+	TypeID           int    `json:"type_id"`
+	CreationDate     string `json:"creation_date"`
+	ModificationDate string `json:"modification_date"`
+	Status           string `json:"status"`
+	Setter           string `json:"setter"`
+	Requestee        string `json:"requestee,omitempty"`
 }
