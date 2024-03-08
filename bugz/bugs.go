@@ -1,91 +1,83 @@
-// vim: set expandtab ts=4 sw=4 sts=4 :
 package bugz
-
-/// https://bugzilla.readthedocs.io/en/latest/api/index.html
 
 import (
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"net/url"
-	"strconv"
-	"sync"
-
-	. "hugpoint.tech/freebsd/forge/util"
+	"os"
 )
 
-func (b *BugzClient) Bugs() *BugsAPI {
-	result := &BugsAPI{
-		client: b,
-		params: make(url.Values),
-	}
+func DownloadBugs() {
+	apiURL := "https://bugs.freebsd.org/bugzilla/rest/bug"
 
-	result.params.Set("token", b.token)
-	return result
-}
-
-type BugsAPI struct {
-	mu     sync.Mutex
-	client *BugzClient
-	params url.Values
-}
-
-func (b *BugsAPI) GetAll(chanDone chan struct{}, chanBug chan Bug, pullConcurrencyLevel int) {
-	offset := 0
-	limitator := make(chan int, pullConcurrencyLevel)
+	// Specify the pagination parameters
+	pageSize := 1000
+	pageNumber := 0
 
 	for {
-		select {
-		case <-chanDone:
+		// Create query parameters
+		params := url.Values{}
+		params.Set("api_key", "API_KEY_VALUE")
+		params.Set("limit", fmt.Sprint(pageSize))
+		params.Set("offset", fmt.Sprint((pageNumber)*pageSize))
+
+		// Construct the full URL with query parameters
+		fullURL := apiURL + "?" + params.Encode()
+
+		// Make a GET request to the API
+		response, err := http.Get(fullURL)
+		if err != nil {
+			fmt.Printf("Error making GET request to %s: %v\n", fullURL, err)
 			return
-		case limitator <- 1:
-			go func(offset int) {
-				b.getBugs(chanDone, chanBug, offset)
-				<-limitator
-			}(offset)
 		}
-		offset += 1000
+
+		// Read the response body
+		body, err := io.ReadAll(response.Body)
+		if err != nil {
+			fmt.Printf("Error reading response body from %s: %v\n", fullURL, err)
+			return
+		}
+		response.Body.Close()
+
+		// Process the JSON data
+		var bugsResponse map[string][]Bug
+		err = json.Unmarshal(body, &bugsResponse)
+		if err != nil {
+			fmt.Printf("Error decoding JSON: %v\n", err)
+			return
+		}
+
+		// Iterate over bugs and write to individual files
+		for _, bug := range bugsResponse["bugs"] {
+			filename := fmt.Sprintf("bug_%d.json", bug.ID)
+			err := writeToFile(filename, bug)
+			if err != nil {
+				fmt.Printf("Error writing to file %s: %v\n", filename, err)
+				return
+			}
+		}
+
+		// Check if there are more pages
+		if len(bugsResponse["bugs"]) < pageSize {
+			break
+		}
+
+		// Move to the next page
+		pageNumber++
 	}
+
+	fmt.Println("Bug data written to individual files.")
 }
 
-func (b *BugsAPI) getBugs(chanDone chan struct{}, chanBug chan Bug, offset int) {
-	select {
-	case <-chanDone:
-		return
-	default:
+func writeToFile(filename string, bug Bug) error {
+	// Use json.MarshalIndent to preserve the original formatting
+	indentedData, err := json.MarshalIndent(bug, "", "  ")
+	if err != nil {
+		return err
 	}
 
-	fmt.Printf("\rReading bugzilla bugs begin, current offset: %d", offset)
-
-	batchSize := 1000
-	b.mu.Lock()
-
-	b.params.Set("limit", strconv.Itoa(batchSize))
-	b.params.Set("offset", strconv.Itoa(offset))
-	params := b.params.Encode()
-	url := b.client.url
-	b.mu.Unlock()
-
-	bugzilla := NewBugzClient()
-	response, err := bugzilla.http.Get(url + "/bug?" + params)
-	CheckFatal("getBugs bugzilla.http.Get", err)
-	defer response.Body.Close()
-
-	bugsResponse := &BugsResponse{}
-	err = json.NewDecoder(response.Body).Decode(&bugsResponse)
-	CheckFatal("getBugs", err)
-
-	for _, v := range bugsResponse.Bugs {
-		chanBug <- v
-	}
-
-	fmt.Printf("\rReading bugzilla bugs done, current offset: %d", offset)
-	if len(bugsResponse.Bugs) < batchSize {
-		select {
-		case <-chanDone:
-			return
-		default:
-			close(chanDone)
-		}
-		return
-	}
+	// Write the data to the specified file
+	return os.WriteFile(filename, indentedData, 0644)
 }
