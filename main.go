@@ -3,18 +3,19 @@ package main
 import (
 	"fmt"
 	"os"
+	. "hugpoint.tech/freebsd/forge/bugz"
 )
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Println("not enough arguments. use help")
+		fmt.Println("Not enough arguments. Use help")
 		return
 	}
 	command := os.Args[1]
 
 	switch command {
 	case "bugzilla-download-bugs":
-		downloadBugs()
+		DownloadBugs()
 	case "help":
 		printHelp()
 	case "bugzilla-list-bugs":
@@ -24,28 +25,25 @@ func main() {
 	case "bugzilla-show-bugs":
 		showBugs()
 	default:
-		fmt.Println("use help")
+		fmt.Println("Use help")
 	}
 }
 
 func printHelp() { // not sure about functions descriptions
-	fmt.Println("available commands:\n" +
-		"bugzilla-download-bugs - downloads bugs from bugzilla\n" +
-		"bugzilla-show-bugs - shows bugzilla bugs\n" +
-		"bugzilla-list-bugs - displays downloaded bugs\n" +
-		"bugzilla-download-users - downloads users from bugzilla\n" +
-		"help - shows available commands")
-}
-func downloadBugs() {
-	fmt.Println("downloading bugs")
+	fmt.Println("Available commands:\n" +
+		"bugzilla-download-bugs - Downloads bugs from bugzilla\n" +
+		"bugzilla-show-bugs - Shows bugzilla bugs\n" +
+		"bugzilla-list-bugs - Displays downloaded bugs\n" +
+		"bugzilla-download-users - Downloads users from bugzilla\n" +
+		"help - Shows available commands")
 }
 func listBugs() {
-	fmt.Println("listing bugs")
+	fmt.Println("Listing bugs")
 }
 func downloadUsers() {
-	fmt.Println("downloading users")
+	fmt.Println("Downloading users")
 }
 func showBugs() {
-	fmt.Println("showing bugs")
+	fmt.Println("Showing bugs")
 }
 
