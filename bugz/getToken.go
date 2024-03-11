@@ -1,3 +1,5 @@
+package bugz
+
 import (
 	"encoding/json"
 	"fmt"
