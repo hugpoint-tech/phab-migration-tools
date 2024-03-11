@@ -9,7 +9,7 @@ import (
 	"os"
 )
 
-func DownloadBugs() {
+func DownloadBugzillaBugs() {
 	apiURL := "https://bugs.freebsd.org/bugzilla/rest/bug"
 
 	// Specify the pagination parameters
