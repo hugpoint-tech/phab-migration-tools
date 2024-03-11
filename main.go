@@ -16,13 +16,13 @@ func main() {
 
 	switch command {
 	case "bugzilla-download-bugs":
-		DownloadBugs()
+		DownloadBugzillaBugs()
 	case "help":
 		printHelp()
 	case "bugzilla-list-bugs":
 		listBugs()
 	case "bugzilla-download-users":
-		GetUsersJson()
+		DownloadBugzillaUsers()
 	case "bugzilla-show-bugs":
 		showBugs()
 	default:
