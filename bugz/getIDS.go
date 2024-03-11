@@ -3,13 +3,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	. "phabricator/bugz"
 	"strings"
 )
 
 func getIDS() (map[int]User, error) {
 	// Specify the path to the directory containing JSON files
-	directoryPath := "bugsJson/"
+	directoryPath := "bugz/"
 
 	fmt.Println("Get IDS from bugs")
 
