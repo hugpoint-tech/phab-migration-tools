@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	. "hugpoint.tech/freebsd/forge/bugz"
-	. "hugpoint.tech/freebsd/forge/usersJson"
 )
 
 func main() {
