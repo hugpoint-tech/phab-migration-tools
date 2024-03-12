@@ -12,7 +12,7 @@ import (
 	"strings"
 )
 
-func GetUsersJson() {
+func DownloadBugzillaUsers() {
 	apiURL := "https://bugs.freebsd.org/bugzilla/rest/user"
 	token, _ := getToken()
 	// Create a 'users' folder if it doesn't exist
