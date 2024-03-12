@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	. "hugpoint.tech/freebsd/forge/bugz"
+	. "hugpoint.tech/freebsd/forge/usersJson"
 )
 
 func main() {
@@ -15,13 +16,13 @@ func main() {
 
 	switch command {
 	case "bugzilla-download-bugs":
-		DownloadBugs()
+		DownloadBugzillaBugs()
 	case "help":
 		printHelp()
 	case "bugzilla-list-bugs":
 		listBugs()
 	case "bugzilla-download-users":
-		downloadUsers()
+		DownloadBugzillaUsers()
 	case "bugzilla-show-bugs":
 		showBugs()
 	default:
@@ -39,9 +40,6 @@ func printHelp() { // not sure about functions descriptions
 }
 func listBugs() {
 	fmt.Println("Listing bugs")
-}
-func downloadUsers() {
-	fmt.Println("Downloading users")
 }
 func showBugs() {
 	fmt.Println("Showing bugs")
