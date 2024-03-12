@@ -1,7 +1,6 @@
-package usersJson
+package bugz
 
 import (
-	"bufio"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -9,7 +8,6 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	. "hugpoint.tech/freebsd/forge/bugz"
 	"strconv"
 	"strings"
 )
@@ -24,26 +22,17 @@ func GetUsersJson() {
 		return
 	}
 
-  //Extract unique IDS from bugs
-	getIDS()
-
-	// Open the file containing IDs
-	idFile, err := os.Open("uniqueIDs1.txt")
+	// Extract unique IDs from bugs
+	idUserMap, err := getIDS()
 	if err != nil {
-		fmt.Printf("Error opening id file: %v\n", err)
 		return
 	}
 
-	// Create a scanner to read IDs from the file
-	scanner := bufio.NewScanner(idFile)
-
-	// Read IDs in a loop until there are no more left
-	for scanner.Scan() {
-		id := scanner.Text()
-
+	// Iterate through the map
+	for id, _ := range idUserMap {
 		// Create query parameters
 		params := url.Values{}
-		params.Set("ids", id)
+		params.Set("ids", strconv.Itoa(id)) // Convert id to string if needed
 		params.Set("token", token)
 
 		// Construct the full URL with query parameters
@@ -85,10 +74,10 @@ func GetUsersJson() {
 
 		// Iterate over users and write to individual files
 		for _, user := range userResponse["users"] {
-			// Convert the id to an integer
-			idInt, _ := strconv.Atoi(id)
 
-			filename := filepath.Join("usersJson", fmt.Sprintf("user_%d.json", idInt))
+			idStr := strconv.Itoa(id)
+
+			filename := filepath.Join("usersJson", fmt.Sprintf("user_%s.json", idStr))
 			err := writeToFile(filename, user)
 			if err != nil {
 				fmt.Printf("Error writing to file %s: %v\n", filename, err)
