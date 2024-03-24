@@ -16,7 +16,7 @@ func DownloadBugzillaUsers() {
 	apiURL := "https://bugs.freebsd.org/bugzilla/rest/user"
 	token, _ := getToken()
 	// Create a 'users' folder if it doesn't exist
-	err := os.Mkdir("usersJson", os.ModePerm)
+	err := os.Mkdir("data/users", os.ModePerm)
 	if err != nil && !os.IsExist(err) {
 		fmt.Printf("Error creating 'users' folder: %v\n", err)
 		return
