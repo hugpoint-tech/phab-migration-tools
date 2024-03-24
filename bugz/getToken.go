@@ -1,4 +1,4 @@
-package usersJson
+package bugz
 
 import (
 	"encoding/json"
