@@ -12,7 +12,7 @@ import (
 )
 
 type BugzClient struct {
-	Token string
+	token string
 	URL   string
 
 	http *http.Client
