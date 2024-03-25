@@ -5,9 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/url"
+	//"net/url"
 	"os"
-
 	. "hugpoint.tech/freebsd/forge/util"
 )
 
@@ -32,19 +31,19 @@ func NewBugzClient() *BugzClient {
 
 	bugz := &BugzClient{
 		URL:   "https://bugs.freebsd.org/bugzilla/rest",
-		Token: "",
+		token: "",
 		http:  &http.Client{},
 	}
 
-	formData := url.Values{}
+	/*formData := url.Values{}
 	formData.Set("login", login)
 	formData.Set("password", password)
 
-	response, err := bugz.http.Get(bugz.URL + "/login?" + formData.Encode())
-	CheckFatal("NewBugzClient bugz.http.Get", err)
+	response, _ := bugz.http.Get(bugz.URL + "/login?" + formData.Encode())
+	//CheckFatal("NewBugzClient bugz.http.Get", err)
 	defer response.Body.Close()
 
-	if response.StatusCode != http.StatusOK {
+	/*if response.StatusCode != http.StatusOK {
 		CheckFatal("NewBugzClient", fmt.Errorf("login failed, status code: %d", response.StatusCode))
 	}
 
@@ -56,13 +55,13 @@ func NewBugzClient() *BugzClient {
 	if loginResponse.Token == "" {
 		CheckFatal("NewBugzClient loginResponse.Token", fmt.Errorf("login token is empty"))
 	}
-	bugz.Token = loginResponse.Token
+	bugz.Token = loginResponse.Token*/
 
 	return bugz
 }
 
-func (bc *BugzClient) GetToken() string {
-	return bc.Token
+func (bc *BugzClient) GetToken() (string, error) {
+	return GetToken()
 }
 
 // DownloadAllBugs downloads all bugs from the Bugzilla API and saves them to individual JSON files.
