@@ -12,8 +12,8 @@ import (
 func DownloadBugzillaBugs() error {
 	apiURL := "https://bugs.freebsd.org/bugzilla/rest/bug"
 
-	// Create a 'bugsJson' folder if it doesn't exist
-	err := os.MkdirAll("bugz", os.ModePerm)
+	// Create a 'bugs' folder if it doesn't exist
+	err := os.Mkdir("bugs", os.ModePerm)
 	if err != nil && !os.IsExist(err) {
 		return fmt.Errorf("Error creating 'users' folder: %v\n", err)
 	}
