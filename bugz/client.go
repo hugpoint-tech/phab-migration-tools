@@ -65,23 +65,7 @@ func (bc *BugzClient) GetToken() string {
 	return bc.Token
 }
 
-func (bc *BugzClient) DownloadBugs() ([]Bug, error) {
-	// Make a GET request to fetch bugs
-	response, err := bc.http.Get(bc.URL + "/bugs")
-	if err != nil {
-		return nil, fmt.Errorf("error making GET request to Bugzilla API: %w", err)
-	}
-	defer response.Body.Close()
-
-	if response.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("unexpected status code: %d", response.StatusCode)
-	}
-
-	// Decode the response body into a slice of Bug objects
-	var bugs []Bug
-	if err := json.NewDecoder(response.Body).Decode(&bugs); err != nil {
-		return nil, fmt.Errorf("error decoding JSON response: %w", err)
-	}
-
-	return bugs, nil
+// DownloadAllBugs downloads all bugs from the Bugzilla API and saves them to individual JSON files.
+func (bc *BugzClient) DownloadAllBugs() error {
+	return DownloadBugzillaBugs()
 }
