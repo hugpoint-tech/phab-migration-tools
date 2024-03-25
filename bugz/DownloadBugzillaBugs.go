@@ -9,8 +9,14 @@ import (
 	"os"
 )
 
-func DownloadBugzillaBugs() {
+func DownloadBugzillaBugs() error {
 	apiURL := "https://bugs.freebsd.org/bugzilla/rest/bug"
+
+	// Create a 'bugsJson' folder if it doesn't exist
+	err := os.MkdirAll("bugsJson/method", os.ModePerm)
+	if err != nil && !os.IsExist(err) {
+		return fmt.Errorf("Error creating 'users' folder: %v\n", err)
+	}
 
 	// Specify the pagination parameters
 	pageSize := 1000
@@ -19,7 +25,7 @@ func DownloadBugzillaBugs() {
 	for {
 		// Create query parameters
 		params := url.Values{}
-		params.Set("api_key", "API_KEY_VALUE")
+		params.Set("api_key", "value")
 		params.Set("limit", fmt.Sprint(pageSize))
 		params.Set("offset", fmt.Sprint((pageNumber)*pageSize))
 
@@ -29,15 +35,13 @@ func DownloadBugzillaBugs() {
 		// Make a GET request to the API
 		response, err := http.Get(fullURL)
 		if err != nil {
-			fmt.Printf("Error making GET request to %s: %v\n", fullURL, err)
-			return
+			return fmt.Errorf("Error making GET request to %s: %v\n", fullURL, err)
 		}
 
 		// Read the response body
 		body, err := io.ReadAll(response.Body)
 		if err != nil {
-			fmt.Printf("Error reading response body from %s: %v\n", fullURL, err)
-			return
+			return fmt.Errorf("Error reading response body from %s: %v\n", fullURL, err)
 		}
 		response.Body.Close()
 
@@ -45,17 +49,15 @@ func DownloadBugzillaBugs() {
 		var bugsResponse map[string][]Bug
 		err = json.Unmarshal(body, &bugsResponse)
 		if err != nil {
-			fmt.Printf("Error decoding JSON: %v\n", err)
-			return
+			return fmt.Errorf("Error decoding JSON: %v\n", err)
 		}
 
 		// Iterate over bugs and write to individual files
 		for _, bug := range bugsResponse["bugs"] {
-			filename := fmt.Sprintf("bug_%d.json", bug.ID)
+			filename := filepath.Join("bugsJson", fmt.Sprintf("bug_%d.json", bug.ID))
 			err := writeToFile(filename, bug)
 			if err != nil {
-				fmt.Printf("Error writing to file %s: %v\n", filename, err)
-				return
+				return fmt.Errorf("Error writing to file %s: %v\n", filename, err)
 			}
 		}
 
@@ -69,6 +71,7 @@ func DownloadBugzillaBugs() {
 	}
 
 	fmt.Println("Bug data written to individual files.")
+	return nil
 }
 
 func writeToFile(filename string, bug Bug) error {
