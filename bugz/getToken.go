@@ -14,8 +14,8 @@ func GetToken() (string, error) {
 
 	// Create request body with login and password
 	params := url.Values{}
-	params.Set("login", "kovalthechosen@gmail.com")
-	params.Set("password", "@tt.:3JmNeNh>7J")
+	params.Set("login", "email")
+	params.Set("password", "val")
 
 	fullURL := apiURL + "?" + params.Encode()
 
