@@ -76,3 +76,7 @@ func (bc *BugzClient) showBugs() {
 func (bc *BugzClient) listBugs() {
 	fmt.Println("listing bugs")
 }
+
+func (bc *BugzClient) getIDs() (map[int]User, error) {
+	return GetIDS()
+}
