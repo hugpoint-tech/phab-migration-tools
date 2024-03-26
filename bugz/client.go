@@ -68,3 +68,11 @@ func (bc *BugzClient) GetToken() (string, error) {
 func (bc *BugzClient) DownloadAllBugs() error {
 	return DownloadBugzillaBugs()
 }
+
+func (bc *BugzClient) showBugs() {
+	fmt.Println("showing bugs")
+}
+
+func (bc *BugzClient) listBugs() {
+	fmt.Println("listing bugs")
+}
