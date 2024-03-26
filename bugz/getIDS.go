@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-func getIDS() (map[int]User, error) {
+func GetIDS() (map[int]User, error) {
 	// Specify the path to the directory containing JSON files
 	directoryPath := "bugs"
 
