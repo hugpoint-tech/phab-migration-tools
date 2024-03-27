@@ -4,16 +4,18 @@ package bugz
 import (
 	"encoding/json"
 	"fmt"
+	"io"
+	"path/filepath"
 	"net/http"
 	"net/url"
 	"os"
-
+	"strings"
 	. "hugpoint.tech/freebsd/forge/util"
 )
 
 type BugzClient struct {
 	token string
-	url   string
+	URL   string
 
 	http *http.Client
 }
@@ -23,45 +25,243 @@ type BugzLoginResponse struct {
 	Token string `json:"token"`
 }
 
-func NewBugzClient() BugzClient {
-	login, ok := os.LookupEnv("BUGZILLA_LOGIN")
-	if !ok {
-		panic("BUGZILLA_LOGIN is not set")
+func NewBugzClient() *BugzClient {
+	login := os.Getenv("BUGZILLA_LOGIN") //Retrieve env var values and check if they are empty
+	password := os.Getenv("BUGZILLA_PASSWORD")
+	if login == "" || password == "" {
+		panic("BUGZILLA_LOGIN or BUGZILLA_PASSWORD is not set")
 	}
-	password, ok := os.LookupEnv("BUGZILLA_PASSWORD")
-	if !ok {
-		panic("BUGZILLA_PASSWORD is not set")
-	}
-	var loginResponse BugzLoginResponse
 
-	bugz := BugzClient{
-		url:   "https://bugs.freebsd.org/bugzilla/rest",
+	bugz := &BugzClient{
+		URL:   "https://bugs.freebsd.org/bugzilla/rest",
 		token: "",
-		http:  &http.Client{
-			// Timeout: time.Second * 10,
-		},
+		http:  &http.Client{},
 	}
-	formData := url.Values{}
+
+	/*formData := url.Values{}
 	formData.Set("login", login)
 	formData.Set("password", password)
 
-	response, err := bugz.http.Get(bugz.url + "/login?" + formData.Encode())
-	CheckFatal("NewBugzClient bugz.http.Get", err)
+	response, _ := bugz.http.Get(bugz.URL + "/login?" + formData.Encode())
+	//CheckFatal("NewBugzClient bugz.http.Get", err)
 	defer response.Body.Close()
 
-	if response.StatusCode != http.StatusOK {
+	/*if response.StatusCode != http.StatusOK {
 		CheckFatal("NewBugzClient", fmt.Errorf("login failed, status code: %d", response.StatusCode))
 	}
 
+	var loginResponse BugzLoginResponse
 	if err := json.NewDecoder(response.Body).Decode(&loginResponse); err != nil {
 		CheckFatal("NewBugzClient", fmt.Errorf("error reading bugzilla login response body: %w", err))
 	}
 
 	if loginResponse.Token == "" {
-		err = fmt.Errorf("login token is empty")
-		CheckFatal("NewBugzClient loginResponse.Token", err)
+		CheckFatal("NewBugzClient loginResponse.Token", fmt.Errorf("login token is empty"))
 	}
-	bugz.token = loginResponse.Token
+	bugz.Token = loginResponse.Token*/
 
 	return bugz
+}
+
+func (bc *BugzClient) GetToken() (string, error) {
+	return GetToken()
+}
+
+// DownloadAllBugs downloads all bugs from the Bugzilla API and saves them to individual JSON files.
+func (bc *BugzClient) DownloadAllBugs() error {
+	apiURL := "https://bugs.freebsd.org/bugzilla/rest/bug"
+
+	// Create a 'bugs' folder if it doesn't exist
+	err := os.MkdirAll("bugs", os.ModePerm)
+	if err != nil && !os.IsExist(err) {
+		return fmt.Errorf("Error creating 'users' folder: %v\n", err)
+	}
+
+	// Specify the pagination parameters
+	pageSize := 1000
+	pageNumber := 0
+
+	for {
+		// Create query parameters
+		params := url.Values{}
+		params.Set("api_key", "val")
+		params.Set("limit", fmt.Sprint(pageSize))
+		params.Set("offset", fmt.Sprint((pageNumber)*pageSize))
+
+		// Construct the full URL with query parameters
+		fullURL := apiURL + "?" + params.Encode()
+
+		// Make a GET request to the API
+		response, err := http.Get(fullURL)
+		if err != nil {
+			return fmt.Errorf("Error making GET request to %s: %v\n", fullURL, err)
+		}
+
+		// Read the response body
+		body, err := io.ReadAll(response.Body)
+		if err != nil {
+			return fmt.Errorf("Error reading response body from %s: %v\n", fullURL, err)
+		}
+		response.Body.Close()
+
+		// Process the JSON data
+		var bugsResponse map[string][]Bug
+		err = json.Unmarshal(body, &bugsResponse)
+		if err != nil {
+			return fmt.Errorf("Error decoding JSON: %v\n", err)
+		}
+
+		// Iterate over bugs and write to individual files
+		for _, bug := range bugsResponse["bugs"] {
+			filename := filepath.Join("bugsJson", fmt.Sprintf("bug_%d.json", bug.ID))
+			err := writeToFile(filename, bug)
+			if err != nil {
+				return fmt.Errorf("Error writing to file %s: %v\n", filename, err)
+			}
+		}
+
+		// Check if there are more pages
+		if len(bugsResponse["bugs"]) < pageSize {
+			break
+		}
+
+		// Move to the next page
+		pageNumber++
+	}
+
+	fmt.Println("Bug data written to individual files.")
+	return nil
+}
+
+func writeToFile(filename string, bug Bug) error {
+	// Use json.MarshalIndent to preserve the original formatting
+	indentedData, err := json.MarshalIndent(bug, "", "  ")
+	if err != nil {
+		return err
+	}
+
+	// Write the data to the specified file
+	return os.WriteFile(filename, indentedData, 0644)
+}
+
+func (bc *BugzClient) showBugs() {
+	fmt.Println("showing bugs")
+}
+
+func (bc *BugzClient) listBugs() {
+	fmt.Println("listing bugs")
+}
+
+func getIDS() (map[int]User, error) {
+	// Specify the path to the directory containing JSON files
+	directoryPath := "data/bugs"
+
+	fmt.Println("Get IDS from bugs")
+
+	// Get a list of all JSON files in the directory
+	files, err := os.ReadDir(directoryPath)
+	if err != nil {
+		fmt.Printf("Error reading directory: %v\n", err)
+		return nil, nil
+	}
+
+	// Map to store extracted IDs and corresponding User objects
+	idUserMap := make(map[int]User)
+
+	// Iterate over each file in the directory
+	for _, file := range files {
+		if strings.HasSuffix(file.Name(), ".json") {
+			// Construct the full path to the JSON file
+			filePath := filepath.Join(directoryPath, file.Name())
+
+			// Read the JSON file
+			jsonData, err := os.ReadFile(filePath)
+			if err != nil {
+				fmt.Printf("Error reading JSON file %s: %v\n", filePath, err)
+				continue
+			}
+
+			// Process the JSON data
+			var bug Bug
+			err = json.Unmarshal(jsonData, &bug)
+			if err != nil {
+				fmt.Printf("Error decoding JSON from file %s: %v\n", filePath, err)
+				continue
+			}
+
+			// Add the extracted IDs to the map
+			ids := extractIDs(bug)
+			for id, user := range ids {
+				idUserMap[id] = user
+			}
+		}
+	}
+
+	return idUserMap, nil
+}
+
+func extractIDs(bug Bug) map[int]User {
+	// Create a map to store the unique IDs and corresponding Users
+	idUserMap := make(map[int]User)
+
+	// Extract 'id' field from AssignedToDetail
+	if _, ok := idUserMap[bug.AssignedToDetail.ID]; !ok {
+		idUserMap[bug.AssignedToDetail.ID] = bug.AssignedToDetail
+	}
+
+	// Extract 'id' field from CCDetail
+	for _, ccUser := range bug.CCDetail {
+		if _, ok := idUserMap[ccUser.ID]; !ok {
+			idUserMap[ccUser.ID] = ccUser
+		}
+	}
+
+	// Extract 'id' field from CreatorDetail
+	if _, ok := idUserMap[bug.CreatorDetail.ID]; !ok {
+		idUserMap[bug.CreatorDetail.ID] = bug.CreatorDetail
+	}
+
+	return idUserMap
+}
+
+func (bc *BugzClient) DownloadBugzillaUsers() {
+	// Create a 'data/users' folder if it doesn't exist
+	err := os.MkdirAll("data/users", os.ModePerm)
+	if err != nil && !os.IsExist(err) {
+		fmt.Printf("Error creating 'users' folder: %v\n", err)
+		return
+	}
+
+	// Extract unique IDs from bugs
+	idUserMap, err := getIDS()
+	if err != nil {
+		return
+	}
+
+	// Iterate through the map
+	for id, user := range idUserMap {
+		// Construct the filename
+		filename := fmt.Sprintf("user_%d.json", id)
+
+		// Create the full file path
+		filePath := filepath.Join("data/users", filename)
+
+		// Open the file for writing
+		file, err := os.Create(filePath)
+		if err != nil {
+			fmt.Printf("Error creating file %s: %v\n", filePath, err)
+			continue
+		}
+		defer file.Close()
+
+		// Encode the user object to JSON and write it to the file
+		encoder := json.NewEncoder(file)
+		err = encoder.Encode(user)
+		if err != nil {
+			fmt.Printf("Error encoding user %d to JSON: %v\n", id, err)
+			continue
+		}
+
+		fmt.Printf("User %d saved to %s\n", id, filePath)
+	}
 }
