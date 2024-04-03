@@ -13,7 +13,7 @@ func main() {
 	}
 	command := os.Args[1]
 
-	bc := new(BugzClient) // Create a BugzClient instance
+	bc := NewBugzClient() // Create a BugzClient instance
 
 	switch command {
 	case "bugzilla-download-bugs":
@@ -35,10 +35,10 @@ func main() {
 		}
 	case "bugzilla-show-bugs":
 		if err := bc.ShowBugs(); err != nil {
-			fmt.Printf("Error showing bugs: %v\n", err)
+			fmt.Printf("error showing bugs: %v\n", err)
 		}
 	default:
-		fmt.Println("Use help")
+		fmt.Println("use help")
 	}
 
 }
