@@ -26,27 +26,21 @@ type BugzLoginResponse struct {
 }
 
 func NewBugzClient() *BugzClient {
-	login := os.Getenv("BUGZILLA_LOGIN") //Retrieve env var values and check if they are empty
-	password := os.Getenv("BUGZILLA_PASSWORD")
-	if login == "" || password == "" {
-		panic("BUGZILLA_LOGIN or BUGZILLA_PASSWORD is not set")
-	}
-
-	bugz := &BugzClient{
-		URL:   "https://bugs.freebsd.org/bugzilla/rest",
-		token: "",
-		http:  &http.Client{},
-	}
+	//login := os.Getenv("BUGZILLA_LOGIN") //Retrieve env var values and check if they are empty
+	//password := os.Getenv("BUGZILLA_PASSWORD")
+	//if login == "" || password == "" {
+	//	panic("BUGZILLA_LOGIN or BUGZILLA_PASSWORD is not set")
+	//}
 
 	/*formData := url.Values{}
 	formData.Set("login", login)
 	formData.Set("password", password)
 
-	response, _ := bugz.http.Get(bugz.URL + "/login?" + formData.Encode())
-	//CheckFatal("NewBugzClient bugz.http.Get", err)
+	response, _ := bc.http.Get(bc.URL + "/login?" + formData.Encode())
+	//CheckFatal("NewBugzClient bc.http.Get", err)
 	defer response.Body.Close()
 
-	/*if response.StatusCode != http.StatusOK {
+	if response.StatusCode != http.StatusOK {
 		CheckFatal("NewBugzClient", fmt.Errorf("login failed, status code: %d", response.StatusCode))
 	}
 
@@ -58,19 +52,24 @@ func NewBugzClient() *BugzClient {
 	if loginResponse.Token == "" {
 		CheckFatal("NewBugzClient loginResponse.Token", fmt.Errorf("login token is empty"))
 	}
-	bugz.Token = loginResponse.Token*/
+	bc.Token = loginResponse.Token*/
 
-	return bugz
+	return &BugzClient{
+		URL:   "https://bugs.freebsd.org/bugzilla/rest",
+		token: "",
+		http:  &http.Client{},
+	}
 }
 
 // DownloadBugzillaBugs downloads all bugs from the Bugzilla API and saves them to individual JSON files.
 func (bc *BugzClient) DownloadBugzillaBugs() error {
-	apiURL := "https://bugs.freebsd.org/bugzilla/rest/bug"
+	// Make URL to bugs
+	apiURL := bc.URL + "/bug"
 
 	// Create a 'bugs' folder if it doesn't exist
 	err := os.MkdirAll("bugs", os.ModePerm)
 	if err != nil && !os.IsExist(err) {
-		return fmt.Errorf("Error creating 'users' folder: %v\n", err)
+		return fmt.Errorf("error creating 'users' folder: %v", err)
 	}
 
 	// Specify the pagination parameters
@@ -80,7 +79,7 @@ func (bc *BugzClient) DownloadBugzillaBugs() error {
 	for {
 		// Create query parameters
 		params := url.Values{}
-		params.Set("api_key", "val")
+		params.Set("api_key", "UVy7lq2agakMQHafj1p2dKaTy2gcxM4t4P1cYvUH")
 		params.Set("limit", fmt.Sprint(pageSize))
 		params.Set("offset", fmt.Sprint((pageNumber)*pageSize))
 
@@ -90,13 +89,13 @@ func (bc *BugzClient) DownloadBugzillaBugs() error {
 		// Make a GET request to the API
 		response, err := http.Get(fullURL)
 		if err != nil {
-			return fmt.Errorf("Error making GET request to %s: %v\n", fullURL, err)
+			return fmt.Errorf("error making GET request to %s: %v", fullURL, err)
 		}
 
 		// Read the response body
 		body, err := io.ReadAll(response.Body)
 		if err != nil {
-			return fmt.Errorf("Error reading response body from %s: %v\n", fullURL, err)
+			return fmt.Errorf("error reading response body from %s: %v", fullURL, err)
 		}
 		response.Body.Close()
 
@@ -104,7 +103,7 @@ func (bc *BugzClient) DownloadBugzillaBugs() error {
 		var bugsResponse map[string][]Bug
 		err = json.Unmarshal(body, &bugsResponse)
 		if err != nil {
-			return fmt.Errorf("Error decoding JSON: %v\n", err)
+			return fmt.Errorf("error decoding JSON: %v", err)
 		}
 
 		// Iterate over bugs and write to individual files
@@ -112,7 +111,7 @@ func (bc *BugzClient) DownloadBugzillaBugs() error {
 			filename := filepath.Join("bugs", fmt.Sprintf("bug_%d.json", bug.ID))
 			err := writeToFile(filename, bug)
 			if err != nil {
-				return fmt.Errorf("Error writing to file %s: %v\n", filename, err)
+				return fmt.Errorf("error writing to file %s: %v", filename, err)
 			}
 		}
 
@@ -159,8 +158,7 @@ func getIDS() (map[int]User, error) {
 	// Get a list of all JSON files in the directory
 	files, err := os.ReadDir(directoryPath)
 	if err != nil {
-		fmt.Printf("Error reading directory: %v\n", err)
-		return nil, nil
+		return nil, fmt.Errorf("error reading directory: %w", err)
 	}
 
 	// Map to store extracted IDs and corresponding User objects
@@ -226,14 +224,13 @@ func (bc *BugzClient) DownloadBugzillaUsers() error {
 	// Create a 'data/users' folder if it doesn't exist
 	err := os.MkdirAll("data/users", os.ModePerm)
 	if err != nil && !os.IsExist(err) {
-		fmt.Printf("Error creating 'users' folder: %v\n", err)
-		return nil
+		return fmt.Errorf("error creating 'users' folder: %w", err)
 	}
 
 	// Extract unique IDs from bugs
 	idUserMap, err := getIDS()
 	if err != nil {
-		return nil
+		return fmt.Errorf("error reading directory: %w", err)
 	}
 
 	// Iterate through the map
