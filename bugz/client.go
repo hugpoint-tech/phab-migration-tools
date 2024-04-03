@@ -79,7 +79,7 @@ func (bc *BugzClient) DownloadBugzillaBugs() error {
 	for {
 		// Create query parameters
 		params := url.Values{}
-		params.Set("api_key", "UVy7lq2agakMQHafj1p2dKaTy2gcxM4t4P1cYvUH")
+		params.Set("api_key", "val")
 		params.Set("limit", fmt.Sprint(pageSize))
 		params.Set("offset", fmt.Sprint((pageNumber)*pageSize))
 
