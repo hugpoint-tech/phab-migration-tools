@@ -41,6 +41,9 @@ func NewBugzClient() *BugzClient {
 	formData.Set("password", password)
 
 	response, _ := bc.http.Get(bc.URL + "/login?" + formData.Encode())
+	if err != nil {
+		fmt.Printf("login and/or password incorrect")
+	}
 
 	defer response.Body.Close()
 
