@@ -8,42 +8,47 @@ import (
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Println("Not enough arguments. Use help")
+		fmt.Println("not enough arguments. use help")
 		return
 	}
 	command := os.Args[1]
 
+	bc := NewBugzClient() // Create a BugzClient instance
+
 	switch command {
 	case "bugzilla-download-bugs":
-		DownloadBugs()
+		err := bc.DownloadBugzillaBugs()
+		if err != nil {
+			fmt.Printf("Error downloading bugs: %v\n", err)
+		}
 	case "help":
 		printHelp()
 	case "bugzilla-list-bugs":
-		listBugs()
+		err := bc.ListBugs()
+		if err != nil {
+			fmt.Printf("Error listing bugs: %v\n", err)
+		}
 	case "bugzilla-download-users":
-		downloadUsers()
+		err := bc.DownloadBugzillaUsers()
+		if err != nil {
+			fmt.Printf("Error downloading users: %v\n", err)
+		}
 	case "bugzilla-show-bugs":
-		showBugs()
+		if err := bc.ShowBugs(); err != nil {
+			fmt.Printf("error showing bugs: %v\n", err)
+		}
 	default:
-		fmt.Println("Use help")
+		fmt.Println("invalid command")
+		printHelp()
 	}
+
 }
 
 func printHelp() { // not sure about functions descriptions
-	fmt.Println("Available commands:\n" +
-		"bugzilla-download-bugs - Downloads bugs from bugzilla\n" +
-		"bugzilla-show-bugs - Shows bugzilla bugs\n" +
-		"bugzilla-list-bugs - Displays downloaded bugs\n" +
-		"bugzilla-download-users - Downloads users from bugzilla\n" +
-		"help - Shows available commands")
+	fmt.Println("available commands:\n" +
+		"bugzilla-download-bugs - downloads bugs from bugzilla\n" +
+		"bugzilla-show-bugs - shows bugzilla bugs\n" +
+		"bugzilla-list-bugs - displays downloaded bugs\n" +
+		"bugzilla-download-users - downloads users from bugzilla\n" +
+		"help - shows available commands")
 }
-func listBugs() {
-	fmt.Println("Listing bugs")
-}
-func downloadUsers() {
-	fmt.Println("Downloading users")
-}
-func showBugs() {
-	fmt.Println("Showing bugs")
-}
-
