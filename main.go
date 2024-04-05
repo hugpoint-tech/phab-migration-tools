@@ -38,7 +38,8 @@ func main() {
 			fmt.Printf("error showing bugs: %v\n", err)
 		}
 	default:
-		fmt.Println("use help")
+		fmt.Println("invalid command")
+		printHelp()
 	}
 
 }
