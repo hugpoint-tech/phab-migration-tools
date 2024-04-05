@@ -1,4 +1,3 @@
-// vim: set expandtab ts=4 sw=4 sts=4 :
 package bugz
 
 import (
@@ -10,7 +9,6 @@ import (
 	"net/url"
 	"os"
 	"strings"
-	. "hugpoint.tech/freebsd/forge/util"
 )
 
 type BugzClient struct {
@@ -26,12 +24,41 @@ type BugzLoginResponse struct {
 }
 
 func NewBugzClient() *BugzClient {
-	
-	return &BugzClient{
+	login := os.Getenv("BUGZILLA_LOGIN") //Retrieve env var values and check if they are empty
+	password := os.Getenv("BUGZILLA_PASSWORD")
+	if login == "" || password == "" {
+		panic("BUGZILLA_LOGIN or BUGZILLA_PASSWORD is not set")
+	}
+
+	bc := &BugzClient{
 		URL:   "https://bugs.freebsd.org/bugzilla/rest",
 		token: "",
 		http:  &http.Client{},
 	}
+
+	formData := url.Values{}
+	formData.Set("login", login)
+	formData.Set("password", password)
+
+	response, _ := bc.http.Get(bc.URL + "/login?" + formData.Encode())
+
+	defer response.Body.Close()
+
+	if response.StatusCode != http.StatusOK {
+		fmt.Printf("login failed, status code: %d", response.StatusCode)
+	}
+
+	var loginResponse BugzLoginResponse
+	if err := json.NewDecoder(response.Body).Decode(&loginResponse); err != nil {
+		fmt.Printf("error reading bugzilla login response body: %w", err)
+	}
+
+	if loginResponse.Token == "" {
+		fmt.Printf("login token is empty")
+	}
+	bc.token = loginResponse.Token
+
+	return bc
 }
 
 // DownloadBugzillaBugs downloads all bugs from the Bugzilla API and saves them to individual JSON files.
@@ -52,7 +79,7 @@ func (bc *BugzClient) DownloadBugzillaBugs() error {
 	for {
 		// Create query parameters
 		params := url.Values{}
-		params.Set("api_key", "val")
+		params.Set("token", bc.token)
 		params.Set("limit", fmt.Sprint(pageSize))
 		params.Set("offset", fmt.Sprint((pageNumber)*pageSize))
 
@@ -60,7 +87,7 @@ func (bc *BugzClient) DownloadBugzillaBugs() error {
 		fullURL := apiURL + "?" + params.Encode()
 
 		// Make a GET request to the API
-		response, err := http.Get(fullURL)
+		response, err := bc.http.Get(fullURL)
 		if err != nil {
 			return fmt.Errorf("error making GET request to %s: %v", fullURL, err)
 		}
