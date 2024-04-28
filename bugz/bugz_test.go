@@ -1,3 +1,5 @@
+package bugz
+
 import "testing"
 
 func TestExtractIDs(t *testing.T) {
