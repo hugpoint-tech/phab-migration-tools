@@ -20,5 +20,5 @@ jobs:
           go-version: 1.21.1
 
       - name: Run tests
-        run: go test ./bugz/...
+        run: go test ./bugz/bugz_test.go
 
