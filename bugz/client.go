@@ -53,7 +53,7 @@ func NewBugzClient() *BugzClient {
 
 	var loginResponse BugzLoginResponse
 	if err := json.NewDecoder(response.Body).Decode(&loginResponse); err != nil {
-		fmt.Printf("error reading bugzilla login response body: %w", err)
+		fmt.Printf("error reading bugzilla login response body: %s", err)
 	}
 
 	if loginResponse.Token == "" {
