@@ -7,31 +7,12 @@ import (
 )
 
 func TestCreateAndInitializeDatabase(t *testing.T) {
-	// Open the in-memory database connection
-	db, err := sqlite.OpenConn(":memory:", sqlite.OpenReadWrite)
+	db, err := CreateAndInitializeDatabase(":memory:")
 	if err != nil {
-		t.Fatalf("Failed to open in-memory database: %v", err)
+		t.Fatalf("Failed to create and initialize database: %v", err)
 	}
 	defer db.Close()
-
-	// Execute script to create the bugs table
-	createTableQuery := `
-	CREATE TABLE IF NOT EXISTS bugs (
-		id INTEGER PRIMARY KEY,
-		CreationTime TEXT,
-		Creator TEXT,
-		Summary TEXT,
-		OtherFieldsJSON TEXT
-	);`
-	if err := sqlitex.ExecScript(db, createTableQuery); err != nil {
-		t.Fatalf("Error creating table: %v", err)
-	}
-
-	// Insert sample data into the bugs table
-	if err := sqlitex.Exec(db, "INSERT INTO bugs (id, CreationTime, Creator, Summary, OtherFieldsJSON) VALUES (?, ?, ?, ?, ?)", nil, 1, "2077-10-23 09:42:00", "John Dead", "Sample Bug", `{"key": "value"}`); err != nil {
-		t.Fatalf("error executing statement: %v", err)
-	}
-
+	
 	// Query the bugs table to verify that the sample data was inserted correctly
 	stmt, err := db.Prepare(`SELECT id, CreationTime, Creator, Summary, OtherFieldsJSON FROM bugs WHERE id = ?`)
 	if err != nil {
