@@ -9,6 +9,9 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"zombiezen.com/go/sqlite"
+	"zombiezen.com/go/sqlite/sqlitex"
+	"log"
 )
 
 type BugzClient struct {
@@ -284,4 +287,5 @@ db, err := sqlite.OpenConn("bugs.db", 0)
 	if err := sqlitex.ExecScript(db, query); err != nil {
 		log.Fatalf("Error creating table: %v", err)
 	}
+  return db, nil
 }
