@@ -28,12 +28,12 @@ func TestCreateAndInitializeDatabase(t *testing.T) {
 	}
 
 	// Insert sample data into the bugs table
-	if err := sqlitex.Exec(db, "INSERT INTO bugs (id, CreationTime, Creator, Summary, OtherFieldsJSON) VALUES (?, ?, ?, ?, ?)", nil, 1, "2077-10-23 09:42:00", "John Dead", "Sample Bug", `{"key": "value"}`); err != nil {
+	if err := sqlitex.Exec(db, "INSERT INTO :memory: (id, CreationTime, Creator, Summary, OtherFieldsJSON) VALUES (?, ?, ?, ?, ?)", nil, 1, "2077-10-23 09:42:00", "John Dead", "Sample Bug", `{"key": "value"}`); err != nil {
 		t.Fatalf("error executing statement: %v", err)
 	}
 
 	// Query the bugs table to verify that the sample data was inserted correctly
-	stmt, err := db.Prepare(`SELECT id, CreationTime, Creator, Summary, OtherFieldsJSON FROM bugs WHERE id = ?`)
+	stmt, err := db.Prepare(`SELECT id, CreationTime, Creator, Summary, OtherFieldsJSON FROM :memory: WHERE id = ?`)
 	if err != nil {
 		t.Fatalf("Failed to prepare statement: %v", err)
 	}
