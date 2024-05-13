@@ -62,3 +62,4 @@ otherFieldsJSON = stmt.ColumnText(4)
 if id != 1 || creationTime != "2077-10-23 09:42:00" || creator != "John Dead" || summary != "Sample Bug" || otherFieldsJSON != `{"key": "value"}` {
     t.Fatalf("Retrieved data does not match sample data")
 }
+}
