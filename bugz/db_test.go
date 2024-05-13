@@ -1,6 +1,7 @@
 package bugz
 
 import (
+	"fmt"
 	"log"
 	"testing"
 	"zombiezen.com/go/sqlite"
@@ -41,8 +42,19 @@ func TestCreateAndInitializeDatabase(t *testing.T) {
 		summary        string
 		otherFieldsJSON string
 	)
-	row := db.QueryRow("SELECT id, CreationTime, Creator, Summary, OtherFieldsJSON FROM bugs WHERE id = ?", 1)
-	if err := row.Scan(&id, &creationTime, &creator, &summary, &otherFieldsJSON); err != nil {
+	stmt, err := db.Prepare("SELECT id, CreationTime, Creator, Summary, OtherFieldsJSON FROM bugs WHERE id = ?")
+	if err != nil {
+		t.Fatalf("Failed to prepare statement: %v", err)
+	}
+	defer stmt.Finalize()
+
+	if hasRow, err := stmt.Step(); err != nil {
+		t.Fatalf("Error retrieving data: %v", err)
+	} else if !hasRow {
+		t.Fatalf("No rows found")
+	}
+
+	if err := stmt.Scan(&id, &creationTime, &creator, &summary, &otherFieldsJSON); err != nil {
 		t.Fatalf("Failed to scan row: %v", err)
 	}
 
