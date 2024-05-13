@@ -1,6 +1,7 @@
 package bugz
 
 import (
+	"log"
 	"testing"
 	"zombiezen.com/go/sqlite"
 	"zombiezen.com/go/sqlite/sqlitex"
@@ -24,13 +25,12 @@ func TestCreateAndInitializeDatabase(t *testing.T) {
 		OtherFieldsJSON TEXT
 	);`
 	if err := sqlitex.ExecScript(db, createTableQuery); err != nil {
-		t.Fatalf("Failed to create table: %v", err)
+		log.Fatalf("Error creating table: %v", err)
 	}
 
 	// Insert sample data into the bugs table
-	insertQuery := "INSERT INTO bugs (id, CreationTime, Creator, Summary, OtherFieldsJSON) VALUES (?, ?, ?, ?, ?)"
-	if _, err := db.Exec(insertQuery, 1, "2077-10-23 09:42:00", "John Dead", "Sample Bug", `{"key": "value"}`); err != nil {
-		t.Fatalf("Failed to insert sample data into the bugs table: %v", err)
+	if err := sqlitex.Exec(db, "INSERT INTO bugs (id, CreationTime, Creator, Summary, OtherFieldsJSON) VALUES (?, ?, ?, ?, ?)", nil, 1, "2077-10-23 09:42:00", "John Dead", "Sample Bug", `{"key": "value"}`); err != nil {
+		return fmt.Errorf("error executing statement: %v", err)
 	}
 
 	// Query the bugs table to verify that the sample data was inserted correctly
