@@ -264,3 +264,24 @@ func (bc *BugzClient) DownloadBugzillaUsers() error {
 	}
 	return nil
 }
+
+func CreateAndInitializeDatabase(databasePath string) (*sqlite.Conn, error) {
+db, err := sqlite.OpenConn("bugs.db", 0)
+	if err != nil {
+		log.Fatalf("Error opening database: %v", err)
+	}
+	defer db.Close()
+
+	query := `
+	CREATE TABLE IF NOT EXISTS bugs (
+		id INTEGER PRIMARY KEY,
+		CreationTime TEXT,
+		Creator TEXT,
+		Summary TEXT,
+		OtherFieldsJSON TEXT
+	);`
+
+	if err := sqlitex.ExecScript(db, query); err != nil {
+		log.Fatalf("Error creating table: %v", err)
+	}
+}
