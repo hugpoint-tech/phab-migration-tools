@@ -269,7 +269,7 @@ func (bc *BugzClient) DownloadBugzillaUsers() error {
 }
 
 func CreateAndInitializeDatabase(databasePath string) (*sqlite.Conn, error) {
-db, err := sqlite.OpenConn("bugs.db", 0)
+db, err := sqlite.OpenConn(databasePath, 0)
 	if err != nil {
 		log.Fatalf("Error opening database: %v", err)
 	}
