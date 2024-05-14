@@ -15,7 +15,7 @@ func TestCreateAndInitializeDatabase(t *testing.T) {
 	defer db.Close()
 	
 	// Insert sample data into the bugs table
-	if err := sqlitex.ExecuteTransient(db, `INSERT INTO bugs (id, CreationTime, Creator, Summary, OtherFieldsJSON) VALUES (1, '2077-10-23 09:42:00', 'John Dead', 'Sample Bug', '{}')`); err != nil {
+	if err := sqlitex.ExecuteTransient(db, `INSERT INTO bugs (id, CreationTime, Creator, Summary, OtherFieldsJSON) VALUES (1, '2077-10-23 09:42:00', 'John Dead', 'Sample Bug', '{}')`, nil); err != nil {
 		t.Fatalf("Error executing insert statement: %v", err)
 	}
 
