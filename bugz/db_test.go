@@ -2,6 +2,9 @@ package bugz
 
 import (
 	"testing"
+	"zombiezen.com/go/sqlite"
+	"zombiezen.com/go/sqlite/sqlitex"
+	"fmt"
 	)
 
 func TestCreateAndInitializeDatabase(t *testing.T) {
