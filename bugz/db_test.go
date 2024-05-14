@@ -20,7 +20,7 @@ func TestCreateAndInitializeDatabase(t *testing.T) {
 	}
 
 	// Query the bugs table to verify that the sample data was inserted correctly
-	err = sqlitex.ExecuteTransient(db, `SELECT id, CreationTime, Creator, Summary, OtherFieldsJSON FROM bugs WHERE id = 1`, &sqlitex.ExecOptions{
+	err = sqlitex.ExecuteTransient(db, `SELECT id, CreationTime, Creator, Summary, OtherFieldsJSON FROM bugs WHERE id = 1`, nil{
 		ResultFunc: func(stmt *sqlite.Stmt) error {
 			var (
 				id             int64
