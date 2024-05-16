@@ -273,8 +273,7 @@ db, err := sqlite.OpenConn(databasePath, 0)
 	if err != nil {
 		log.Fatalf("Error opening database: %v", err)
 	}
-	defer db.Close()
-
+	
 	query := `
 	CREATE TABLE IF NOT EXISTS bugs (
 		id INTEGER PRIMARY KEY,
