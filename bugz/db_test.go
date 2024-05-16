@@ -10,7 +10,7 @@ func TestCreateAndInitializeDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create and initialize database: %v", err)
 	}
-	defer db.Close()
+	//defer db.Close()
 
 	var execOptions sqlitex.ExecOptions
 
