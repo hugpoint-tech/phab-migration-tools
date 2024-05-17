@@ -1,0 +1,1 @@
+SELECT DISTINCT Creator FROM bugs;
