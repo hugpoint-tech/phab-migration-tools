@@ -54,3 +54,38 @@ func TestCreateAndInitializeDatabase(t *testing.T) {
 		t.Fatalf("Retrieved data does not match sample data")
 	}
 }
+func TestGetDistinctCreators(t *testing.T) {
+	db, err := CreateAndInitializeDatabase(":memory:")
+	if err != nil {
+		t.Fatalf("Failed to create and initialize database: %v", err)
+	}
+	defer db.Close()
+
+	sampleData := [][]interface{}{
+		{1, "2077-10-23 09:42:00", "John Dead", "Sample Bug", "{}"},
+		{2, "2077-10-23 10:00:00", "Jane Alive", "Another Bug", "{}"},
+		{3, "2077-10-23 10:15:00", "John Dead", "Yet Another Bug", "{}"},
+	}
+
+	insertText := `INSERT INTO bugs (id, CreationTime, Creator, Summary, OtherFieldsJSON) VALUES (?, ?, ?, ?, ?)`
+	for _, args := range sampleData {
+		if err := sqlitex.ExecuteTransient(db, insertText, &sqlitex.ExecOptions{Args: args}); err != nil {
+			t.Fatalf("Error executing insert statement: %v", err)
+		}
+	}
+
+	creators, err := GetDistinctCreators(db)
+	if err != nil {
+		t.Fatalf("Failed to get distinct creators: %v", err)
+	}
+
+	expectedCreators := []string{"John Dead", "Jane Alive"}
+	if len(creators) != len(expectedCreators) {
+		t.Fatalf("Expected %v creators, got %v", len(expectedCreators), len(creators))
+	}
+	for i, creator := range creators {
+		if creator != expectedCreators[i] {
+			t.Fatalf("Expected creator %v, got %v", expectedCreators[i], creator)
+		}
+	}
+}
