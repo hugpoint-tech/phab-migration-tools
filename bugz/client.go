@@ -9,6 +9,9 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"zombiezen.com/go/sqlite"
+	"zombiezen.com/go/sqlite/sqlitex"
+	"log"
 )
 
 type BugzClient struct {
@@ -263,4 +266,25 @@ func (bc *BugzClient) DownloadBugzillaUsers() error {
 		fmt.Printf("User %d saved to %s\n", id, filePath)
 	}
 	return nil
+}
+
+func CreateAndInitializeDatabase(databasePath string) (*sqlite.Conn, error) {
+db, err := sqlite.OpenConn(databasePath, 0)
+	if err != nil {
+		log.Fatalf("Error opening database: %v", err)
+	}
+	
+	query := `
+	CREATE TABLE IF NOT EXISTS bugs (
+		id INTEGER PRIMARY KEY,
+		CreationTime TEXT,
+		Creator TEXT,
+		Summary TEXT,
+		OtherFieldsJSON TEXT
+	);`
+
+	if err := sqlitex.ExecScript(db, query); err != nil {
+		log.Fatalf("Error creating table: %v", err)
+	}
+  return db, nil
 }
