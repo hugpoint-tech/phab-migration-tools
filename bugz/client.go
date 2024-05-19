@@ -90,7 +90,7 @@ func InsertBug(db *sqlite.Conn, bug Bug) error {
 	return nil
 }
 
-// DownloadBugzillaBugs downloads all bugs from the Bugzilla API and saves them to individual JSON files.
+// DownloadBugzillaBugs downloads all bugs from the Bugzilla API and saves them into SQLite database.
 func (bc *BugzClient) DownloadBugzillaBugs(db *sqlite.Conn) error { // Make URL to bugs
 	apiURL := bc.URL + "/bug"
 
