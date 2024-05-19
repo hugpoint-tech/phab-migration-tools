@@ -1,17 +1,18 @@
 package bugz
 
 import (
+	"embed"
 	"encoding/json"
 	"fmt"
 	"io"
-	"path/filepath"
+	"log"
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"zombiezen.com/go/sqlite"
 	"zombiezen.com/go/sqlite/sqlitex"
-	"log"
 )
 
 type BugzClient struct {
@@ -47,7 +48,6 @@ func NewBugzClient() *BugzClient {
 	if err != nil {
 		fmt.Printf("login and/or password incorrect")
 	}
-
 	defer response.Body.Close()
 
 	if response.StatusCode != http.StatusOK {
@@ -67,9 +67,31 @@ func NewBugzClient() *BugzClient {
 	return bc
 }
 
+func InsertBug(db *sqlite.Conn, bug Bug) error {
+
+	bugJSON, err := json.Marshal(bug)
+	if err != nil {
+		return fmt.Errorf("error marshalling bug JSON: %v", err)
+	}
+
+	// Define the execOptions for the insert query
+	execOptions := sqlitex.ExecOptions{
+		Args: []interface{}{bug.ID, bug.CreationTime, bug.Creator, bug.Summary, string(bugJSON)},
+	}
+
+	insertQuery, err := schemaFS.ReadFile("insert.sql")
+	if err != nil {
+		return err
+	}
+
+	if err := sqlitex.ExecuteTransient(db, string(insertQuery), &execOptions); err != nil {
+		fmt.Errorf("error executing insert statement: %v", err)
+	}
+	return nil
+}
+
 // DownloadBugzillaBugs downloads all bugs from the Bugzilla API and saves them to individual JSON files.
-func (bc *BugzClient) DownloadBugzillaBugs() error {
-	// Make URL to bugs
+func (bc *BugzClient) DownloadBugzillaBugs(db *sqlite.Conn) error { // Make URL to bugs
 	apiURL := bc.URL + "/bug"
 
 	// Create a 'bugs' folder if it doesn't exist
@@ -112,12 +134,9 @@ func (bc *BugzClient) DownloadBugzillaBugs() error {
 			return fmt.Errorf("error decoding JSON: %v", err)
 		}
 
-		// Iterate over bugs and write to individual files
 		for _, bug := range bugsResponse["bugs"] {
-			filename := filepath.Join("bugs", fmt.Sprintf("bug_%d.json", bug.ID))
-			err := writeToFile(filename, bug)
-			if err != nil {
-				return fmt.Errorf("error writing to file %s: %v", filename, err)
+			if err := InsertBug(db, bug); err != nil {
+				return fmt.Errorf("error inserting bug %d: %v", bug.ID, err)
 			}
 		}
 
@@ -130,7 +149,6 @@ func (bc *BugzClient) DownloadBugzillaBugs() error {
 		pageNumber++
 	}
 
-	fmt.Println("Bug data written to individual files.")
 	return nil
 }
 
@@ -268,23 +286,44 @@ func (bc *BugzClient) DownloadBugzillaUsers() error {
 	return nil
 }
 
+//go:embed *.sql
+var schemaFS embed.FS
+
 func CreateAndInitializeDatabase(databasePath string) (*sqlite.Conn, error) {
-db, err := sqlite.OpenConn(databasePath, 0)
+	db, err := sqlite.OpenConn(databasePath, 0)
 	if err != nil {
 		log.Fatalf("Error opening database: %v", err)
 	}
-	
-	query := `
-	CREATE TABLE IF NOT EXISTS bugs (
-		id INTEGER PRIMARY KEY,
-		CreationTime TEXT,
-		Creator TEXT,
-		Summary TEXT,
-		OtherFieldsJSON TEXT
-	);`
 
-	if err := sqlitex.ExecScript(db, query); err != nil {
+	// Read the schema from the embedded file
+	schema, err := schemaFS.ReadFile("schema.sql")
+	if err != nil {
+		log.Fatalf("Failed to read schema: %v", err)
+	}
+
+	if err := sqlitex.ExecScript(db, string(schema)); err != nil {
 		log.Fatalf("Error creating table: %v", err)
 	}
-  return db, nil
+	return db, nil
+}
+
+func GetDistinctCreators(db *sqlite.Conn) ([]string, error) {
+	query, err := schemaFS.ReadFile("distinct.sql")
+	if err != nil {
+		log.Fatalf("Failed to read query: %v", err)
+	}
+
+	var creators []string
+	execOptions := &sqlitex.ExecOptions{
+		ResultFunc: func(stmt *sqlite.Stmt) error {
+			creators = append(creators, stmt.ColumnText(0))
+			return nil
+		},
+	}
+
+	if err := sqlitex.ExecuteTransient(db, string(query), execOptions); err != nil {
+		log.Fatalf("Failed to execute query: %v", err)
+	}
+
+	return creators, nil
 }
