@@ -3,7 +3,7 @@ package bugz
 import (
 	"testing"
 	"zombiezen.com/go/sqlite/sqlitex"
-	)
+)
 
 func TestCreateAndInitializeDatabase(t *testing.T) {
 	db, err := CreateAndInitializeDatabase(":memory:")
@@ -17,18 +17,23 @@ func TestCreateAndInitializeDatabase(t *testing.T) {
 		Args: []interface{}{1, "2077-10-23 09:42:00", "John Dead", "Sample Bug", "{}"},
 	}
 
-	// Insert sample data into the bugs table using SQL parameters
-	insertText := `INSERT INTO bugs (id, CreationTime, Creator, Summary, OtherFieldsJSON) VALUES (?, ?, ?, ?, ?)`
-	
-	if err := sqlitex.ExecuteTransient(db, insertText, &execOptions); err != nil {
+	insertQuery, err := schemaFS.ReadFile("insert.sql")
+	if err != nil {
+		t.Fatalf("Failed to read insert query: %v", err)
+	}
+
+	if err := sqlitex.ExecuteTransient(db, string(insertQuery), &execOptions); err != nil {
 		t.Fatalf("Error executing insert statement: %v", err)
 	}
 
-	// Prepare the statement for querying the bugs table
-	prepareText := `SELECT id, CreationTime, Creator, Summary, OtherFieldsJSON FROM bugs WHERE id = 1`
-	
-	stmt, err := db.Prepare(prepareText)
-	
+	// Read the select query from the embedded file
+	selectQuery, err := schemaFS.ReadFile("select.sql")
+	if err != nil {
+		t.Fatalf("Failed to read select query: %v", err)
+	}
+
+	stmt, err := db.Prepare(string(selectQuery))
+
 	if err != nil {
 		t.Fatalf("Failed to prepare select statement: %v", err)
 	}
@@ -54,6 +59,7 @@ func TestCreateAndInitializeDatabase(t *testing.T) {
 		t.Fatalf("Retrieved data does not match sample data")
 	}
 }
+
 func TestGetDistinctCreators(t *testing.T) {
 	db, err := CreateAndInitializeDatabase(":memory:")
 	if err != nil {
@@ -67,9 +73,13 @@ func TestGetDistinctCreators(t *testing.T) {
 		{3, "2077-10-23 10:15:00", "John Dead", "Yet Another Bug", "{}"},
 	}
 
-	insertText := `INSERT INTO bugs (id, CreationTime, Creator, Summary, OtherFieldsJSON) VALUES (?, ?, ?, ?, ?)`
+	insertQuery, err := schemaFS.ReadFile("insert.sql")
+	if err != nil {
+		t.Fatalf("Failed to read insert query: %v", err)
+	}
+
 	for _, args := range sampleData {
-		if err := sqlitex.ExecuteTransient(db, insertText, &sqlitex.ExecOptions{Args: args}); err != nil {
+		if err := sqlitex.ExecuteTransient(db, string(insertQuery), &sqlitex.ExecOptions{Args: args}); err != nil {
 			t.Fatalf("Error executing insert statement: %v", err)
 		}
 	}
