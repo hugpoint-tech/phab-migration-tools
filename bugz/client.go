@@ -1,6 +1,7 @@
 package bugz
 
 import (
+	"embed"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -268,23 +269,44 @@ func (bc *BugzClient) DownloadBugzillaUsers() error {
 	return nil
 }
 
+//go:embed *.sql
+var schemaFS embed.FS
+
 func CreateAndInitializeDatabase(databasePath string) (*sqlite.Conn, error) {
-db, err := sqlite.OpenConn(databasePath, 0)
+	db, err := sqlite.OpenConn(databasePath, 0)
 	if err != nil {
 		log.Fatalf("Error opening database: %v", err)
 	}
-	
-	query := `
-	CREATE TABLE IF NOT EXISTS bugs (
-		id INTEGER PRIMARY KEY,
-		CreationTime TEXT,
-		Creator TEXT,
-		Summary TEXT,
-		OtherFieldsJSON TEXT
-	);`
 
-	if err := sqlitex.ExecScript(db, query); err != nil {
+	// Read the schema from the embedded file
+	schema, err := schemaFS.ReadFile("schema.sql")
+	if err != nil {
+		log.Fatalf("Failed to read schema: %v", err)
+	}
+
+	if err := sqlitex.ExecScript(db, string(schema)); err != nil {
 		log.Fatalf("Error creating table: %v", err)
 	}
-  return db, nil
+	return db, nil
+}
+
+func GetDistinctCreators(db *sqlite.Conn) ([]string, error) {
+	query, err := schemaFS.ReadFile("distinct.sql")
+	if err != nil {
+		log.Fatalf("Failed to read query: %v", err)
+	}
+
+	var creators []string
+	execOptions := &sqlitex.ExecOptions{
+		ResultFunc: func(stmt *sqlite.Stmt) error {
+			creators = append(creators, stmt.ColumnText(0))
+			return nil
+		},
+	}
+
+	if err := sqlitex.ExecuteTransient(db, string(query), execOptions); err != nil {
+		log.Fatalf("Failed to execute query: %v", err)
+	}
+
+	return creators, nil
 }
