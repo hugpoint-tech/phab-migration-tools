@@ -18,8 +18,8 @@ import (
 type BugzClient struct {
 	token string
 	URL   string
-
-	http *http.Client
+	http  *http.Client
+	db    *sqlite.Conn
 }
 
 type BugzLoginResponse struct {
@@ -27,17 +27,23 @@ type BugzLoginResponse struct {
 	Token string `json:"token"`
 }
 
-func NewBugzClient() *BugzClient {
+func NewBugzClient(databasePath string) *BugzClient {
 	login := os.Getenv("BUGZILLA_LOGIN") //Retrieve env var values and check if they are empty
 	password := os.Getenv("BUGZILLA_PASSWORD")
 	if login == "" || password == "" {
 		panic("BUGZILLA_LOGIN or BUGZILLA_PASSWORD is not set")
 	}
 
+	db, err := CreateAndInitializeDatabase(databasePath)
+	if err != nil {
+		log.Fatalf("Error opening database: %v", err)
+	}
+
 	bc := &BugzClient{
 		URL:   "https://bugs.freebsd.org/bugzilla/rest",
 		token: "",
 		http:  &http.Client{},
+		db:    db,
 	}
 
 	formData := url.Values{}
@@ -67,7 +73,7 @@ func NewBugzClient() *BugzClient {
 	return bc
 }
 
-func InsertBug(db *sqlite.Conn, bug Bug) error {
+func (bc *BugzClient) InsertBug(bug Bug) error {
 
 	bugJSON, err := json.Marshal(bug)
 	if err != nil {
@@ -84,14 +90,14 @@ func InsertBug(db *sqlite.Conn, bug Bug) error {
 		return err
 	}
 
-	if err := sqlitex.ExecuteTransient(db, string(insertQuery), &execOptions); err != nil {
+	if err := sqlitex.ExecuteTransient(bc.db, string(insertQuery), &execOptions); err != nil {
 		fmt.Errorf("error executing insert statement: %v", err)
 	}
 	return nil
 }
 
-// DownloadBugzillaBugs downloads all bugs from the Bugzilla API and saves them into SQLite database.
-func (bc *BugzClient) DownloadBugzillaBugs(db *sqlite.Conn) error { // Make URL to bugs
+// DownloadBugzillaBugs downloads all bugs from the Bugzilla API and saves them to individual JSON files.
+func (bc *BugzClient) DownloadBugzillaBugs() error { // Make URL to bugs
 	apiURL := bc.URL + "/bug"
 
 	// Create a 'bugs' folder if it doesn't exist
@@ -135,7 +141,7 @@ func (bc *BugzClient) DownloadBugzillaBugs(db *sqlite.Conn) error { // Make URL 
 		}
 
 		for _, bug := range bugsResponse["bugs"] {
-			if err := InsertBug(db, bug); err != nil {
+			if err := bc.InsertBug(bug); err != nil {
 				return fmt.Errorf("error inserting bug %d: %v", bug.ID, err)
 			}
 		}
