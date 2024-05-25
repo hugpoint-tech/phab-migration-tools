@@ -13,16 +13,12 @@ func main() {
 	}
 	command := os.Args[1]
 
-	bc := NewBugzClient() // Create a BugzClient instance
+	databasePath := "bugsNew.db"      // Specify the path to the database
+	bc := NewBugzClient(databasePath) // Create a BugzClient instance
 
 	switch command {
 	case "bugzilla-download-bugs":
-		db, err := CreateAndInitializeDatabase("sgub.db") // Initialize SQLite database
-		if err != nil {
-			fmt.Printf("Error initializing database: %v\n", err)
-			return
-		}
-		err = bc.DownloadBugzillaBugs(db) // Pass the SQLite connection to the method
+		err := bc.DownloadBugzillaBugs()
 		if err != nil {
 			fmt.Printf("Error downloading bugs: %v\n", err)
 		}
