@@ -30,7 +30,7 @@ func main() {
 			fmt.Printf("Error listing bugs: %v\n", err)
 		}
 	case "bugzilla-download-users":
-		err := bc.DownloadBugzillaUsers()
+		err := bc.DownloadBugzillaUsers(databasePath)
 		if err != nil {
 			fmt.Printf("Error downloading users: %v\n", err)
 		}
