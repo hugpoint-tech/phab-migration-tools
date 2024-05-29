@@ -250,45 +250,67 @@ func extractIDs(bug Bug) map[int]User {
 	return idUserMap
 }
 
-func (bc *BugzClient) DownloadBugzillaUsers() error {
-	// Create a 'data/users' folder if it doesn't exist
-	err := os.MkdirAll("data/users", os.ModePerm)
-	if err != nil && !os.IsExist(err) {
-		return fmt.Errorf("error creating 'users' folder: %w", err)
-	}
-
-	// Extract unique IDs from bugs
-	idUserMap, err := getIDS()
+func (bc *BugzClient) DownloadBugzillaUsers(databasePath string) error {
+	// Connect to the bugs SQLite database
+	bugsDB, err := sqlite.OpenConn(databasePath, sqlite.OpenReadOnly)
 	if err != nil {
-		return fmt.Errorf("error reading directory: %w", err)
+		return fmt.Errorf("error opening bugs database: %v", err)
+	}
+	defer bugsDB.Close()
+
+	// Connect to the users SQLite database or create it if it doesn't exist
+	usersDB, err := sqlite.OpenConn(databasePath, sqlite.OpenReadWrite|sqlite.OpenCreate)
+	if err != nil {
+		return fmt.Errorf("error opening users database: %v", err)
+	}
+	defer usersDB.Close()
+
+	// Read the schema from the embedded file
+	schema, err := schemaFS.ReadFile("users_schema.sql")
+	if err != nil {
+		return fmt.Errorf("failed to read schema: %v", err)
 	}
 
-	// Iterate through the map
-	for id, user := range idUserMap {
-		// Construct the filename
-		filename := fmt.Sprintf("user_%d.json", id)
-
-		// Create the full file path
-		filePath := filepath.Join("data/users", filename)
-
-		// Open the file for writing
-		file, err := os.Create(filePath)
-		if err != nil {
-			fmt.Printf("Error creating file %s: %v\n", filePath, err)
-			continue
-		}
-		defer file.Close()
-
-		// Encode the user object to JSON and write it to the file
-		encoder := json.NewEncoder(file)
-		err = encoder.Encode(user)
-		if err != nil {
-			fmt.Printf("Error encoding user %d to JSON: %v\n", id, err)
-			continue
-		}
-
-		fmt.Printf("User %d saved to %s\n", id, filePath)
+	// Execute the schema to create the "users" table
+	if err := sqlitex.ExecScript(usersDB, string(schema)); err != nil {
+		return fmt.Errorf("failed to execute schema: %v", err)
 	}
+
+	// Execute distinct query on bugs database to retrieve unique user data
+	users, err := GetDistinctCreators(bugsDB)
+	if err != nil {
+		return fmt.Errorf("error getting distinct users: %v", err)
+	}
+
+	// Begin a transaction on users database
+	if err := sqlitex.Execute(usersDB, "BEGIN;", nil); err != nil {
+		return fmt.Errorf("error beginning transaction: %v", err)
+	}
+	defer func() {
+	}()
+
+	// Read the insert query from the embedded file
+	insertQuery, err := schemaFS.ReadFile("insert_user.sql")
+	if err != nil {
+		return fmt.Errorf("failed to read insert query: %v", err)
+	}
+
+	// Insert each user into the users database
+	for _, user := range users {
+		execOptions := sqlitex.ExecOptions{
+			Args: []interface{}{user},
+		}
+		if err := sqlitex.Execute(usersDB, string(insertQuery), &execOptions); err != nil {
+			return fmt.Errorf("error inserting user: %v", err)
+		}
+	}
+
+	// Commit the transaction
+	if err := sqlitex.Execute(usersDB, "COMMIT;", nil); err != nil {
+		return fmt.Errorf("error committing transaction: %v", err)
+	}
+
+	fmt.Println("Unique user data saved to the users table in the database")
 	return nil
 }
 
