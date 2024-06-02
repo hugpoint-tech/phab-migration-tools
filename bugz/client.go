@@ -251,39 +251,32 @@ func extractIDs(bug Bug) map[int]User {
 }
 
 func (bc *BugzClient) DownloadBugzillaUsers(databasePath string) error {
-	// Connect to the bugs SQLite database
-	bugsDB, err := sqlite.OpenConn(databasePath, sqlite.OpenReadOnly)
+	// Connect to the SQLite database or create it if it doesn't exist
+	db, err := sqlite.OpenConn(databasePath, sqlite.OpenReadWrite|sqlite.OpenCreate)
 	if err != nil {
-		return fmt.Errorf("error opening bugs database: %v", err)
+		return fmt.Errorf("error opening database: %v", err)
 	}
-	defer bugsDB.Close()
-
-	// Connect to the users SQLite database or create it if it doesn't exist
-	usersDB, err := sqlite.OpenConn(databasePath, sqlite.OpenReadWrite|sqlite.OpenCreate)
-	if err != nil {
-		return fmt.Errorf("error opening users database: %v", err)
-	}
-	defer usersDB.Close()
+	defer db.Close()
 
 	// Read the schema from the embedded file
-	schema, err := schemaFS.ReadFile("users_schema.sql")
+	schema, err := schemaFS.ReadFile("schema.sql") // assuming combined schema for both bugs and users
 	if err != nil {
 		return fmt.Errorf("failed to read schema: %v", err)
 	}
 
-	// Execute the schema to create the "users" table
-	if err := sqlitex.ExecScript(usersDB, string(schema)); err != nil {
+	// Execute the schema to create necessary tables (both bugs and users)
+	if err := sqlitex.ExecScript(db, string(schema)); err != nil {
 		return fmt.Errorf("failed to execute schema: %v", err)
 	}
 
-	// Execute distinct query on bugs database to retrieve unique user data
-	users, err := GetDistinctCreators(bugsDB)
+	// Execute distinct query on the bugs table to retrieve unique user data
+	users, err := GetDistinctCreators(db)
 	if err != nil {
 		return fmt.Errorf("error getting distinct users: %v", err)
 	}
 
-	// Begin a transaction on users database
-	if err := sqlitex.Execute(usersDB, "BEGIN;", nil); err != nil {
+	// Begin a transaction
+	if err := sqlitex.Execute(db, "BEGIN;", nil); err != nil {
 		return fmt.Errorf("error beginning transaction: %v", err)
 	}
 	defer func() {
@@ -295,18 +288,18 @@ func (bc *BugzClient) DownloadBugzillaUsers(databasePath string) error {
 		return fmt.Errorf("failed to read insert query: %v", err)
 	}
 
-	// Insert each user into the users database
+	// Insert each user into the users table
 	for _, user := range users {
 		execOptions := sqlitex.ExecOptions{
 			Args: []interface{}{user},
 		}
-		if err := sqlitex.Execute(usersDB, string(insertQuery), &execOptions); err != nil {
+		if err := sqlitex.Execute(db, string(insertQuery), &execOptions); err != nil {
 			return fmt.Errorf("error inserting user: %v", err)
 		}
 	}
 
 	// Commit the transaction
-	if err := sqlitex.Execute(usersDB, "COMMIT;", nil); err != nil {
+	if err := sqlitex.Execute(db, "COMMIT;", nil); err != nil {
 		return fmt.Errorf("error committing transaction: %v", err)
 	}
 
