@@ -250,16 +250,12 @@ func extractIDs(bug Bug) map[int]User {
 	return idUserMap
 }
 
-func (bc *BugzClient) DownloadBugzillaUsers(databasePath string) error {
-	// Connect to the SQLite database or create it if it doesn't exist
-	db, err := sqlite.OpenConn(databasePath, sqlite.OpenReadWrite|sqlite.OpenCreate)
-	if err != nil {
-		return fmt.Errorf("error opening database: %v", err)
-	}
-	defer db.Close()
+func (bc *BugzClient) DownloadBugzillaUsers() error {
+	// Use the database connection from BugzClient
+	db := bc.db
 
 	// Read the schema from the embedded file
-	schema, err := schemaFS.ReadFile("schema.sql") // assuming combined schema for both bugs and users
+	schema, err := schemaFS.ReadFile("schema.sql")
 	if err != nil {
 		return fmt.Errorf("failed to read schema: %v", err)
 	}
@@ -279,8 +275,6 @@ func (bc *BugzClient) DownloadBugzillaUsers(databasePath string) error {
 	if err := sqlitex.Execute(db, "BEGIN;", nil); err != nil {
 		return fmt.Errorf("error beginning transaction: %v", err)
 	}
-	defer func() {
-	}()
 
 	// Read the insert query from the embedded file
 	insertQuery, err := schemaFS.ReadFile("insert_user.sql")
