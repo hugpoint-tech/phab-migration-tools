@@ -2,8 +2,8 @@ package main
 
 import (
 	"fmt"
-	"os"
 	. "hugpoint.tech/freebsd/forge/bugz"
+	"os"
 )
 
 func main() {
@@ -30,7 +30,7 @@ func main() {
 			fmt.Printf("Error listing bugs: %v\n", err)
 		}
 	case "bugzilla-download-users":
-		err := bc.DownloadBugzillaUsers(databasePath)
+		err := bc.DownloadBugzillaUsers()
 		if err != nil {
 			fmt.Printf("Error downloading users: %v\n", err)
 		}

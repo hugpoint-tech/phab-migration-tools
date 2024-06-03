@@ -1,5 +1,6 @@
 package main
 
+/*
 import (
 	"context"
 	"encoding/json"
@@ -138,4 +139,4 @@ func readBugsFromFiles(ctx context.Context, chanBug chan bugz.Bug) error {
 	}
 
 	return nil
-}
+}*/
