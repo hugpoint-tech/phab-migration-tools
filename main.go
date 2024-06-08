@@ -2,8 +2,8 @@ package main
 
 import (
 	"fmt"
-	"os"
 	. "hugpoint.tech/freebsd/forge/bugz"
+	"os"
 )
 
 func main() {

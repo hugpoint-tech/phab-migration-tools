@@ -34,16 +34,15 @@ func NewBugzClient(databasePath string) *BugzClient {
 		panic("BUGZILLA_LOGIN or BUGZILLA_PASSWORD is not set")
 	}
 
-	db, err := CreateAndInitializeDatabase(databasePath)
-	if err != nil {
-		log.Fatalf("Error opening database: %v", err)
-	}
-
 	bc := &BugzClient{
 		URL:   "https://bugs.freebsd.org/bugzilla/rest",
 		token: "",
 		http:  &http.Client{},
-		db:    db,
+	}
+
+	// Create and initialize the database
+	if err := bc.CreateAndInitializeDatabase(databasePath); err != nil {
+		log.Fatalf("Error opening database: %v", err)
 	}
 
 	formData := url.Values{}
@@ -251,55 +250,42 @@ func extractIDs(bug Bug) map[int]User {
 }
 
 func (bc *BugzClient) DownloadBugzillaUsers() error {
-	// Create a 'data/users' folder if it doesn't exist
-	err := os.MkdirAll("data/users", os.ModePerm)
-	if err != nil && !os.IsExist(err) {
-		return fmt.Errorf("error creating 'users' folder: %w", err)
-	}
 
-	// Extract unique IDs from bugs
-	idUserMap, err := getIDS()
+	// Execute distinct query on the bugs table to retrieve unique user data
+	users, err := GetDistinctCreators(bc.db)
 	if err != nil {
-		return fmt.Errorf("error reading directory: %w", err)
+		return fmt.Errorf("error getting distinct users: %v", err)
 	}
 
-	// Iterate through the map
-	for id, user := range idUserMap {
-		// Construct the filename
-		filename := fmt.Sprintf("user_%d.json", id)
-
-		// Create the full file path
-		filePath := filepath.Join("data/users", filename)
-
-		// Open the file for writing
-		file, err := os.Create(filePath)
-		if err != nil {
-			fmt.Printf("Error creating file %s: %v\n", filePath, err)
-			continue
-		}
-		defer file.Close()
-
-		// Encode the user object to JSON and write it to the file
-		encoder := json.NewEncoder(file)
-		err = encoder.Encode(user)
-		if err != nil {
-			fmt.Printf("Error encoding user %d to JSON: %v\n", id, err)
-			continue
-		}
-
-		fmt.Printf("User %d saved to %s\n", id, filePath)
+	// Read the insert query from the embedded file
+	insertQuery, err := schemaFS.ReadFile("insert_user.sql")
+	if err != nil {
+		return fmt.Errorf("failed to read insert query: %v", err)
 	}
+
+	// Insert each user into the users table
+	for _, user := range users {
+		execOptions := sqlitex.ExecOptions{
+			Args: []interface{}{user},
+		}
+		if err := sqlitex.Execute(bc.db, string(insertQuery), &execOptions); err != nil {
+			return fmt.Errorf("error inserting user: %v", err)
+		}
+	}
+	fmt.Println("Unique user data saved to the users table in the database")
 	return nil
 }
 
 //go:embed *.sql
 var schemaFS embed.FS
 
-func CreateAndInitializeDatabase(databasePath string) (*sqlite.Conn, error) {
+func (bc *BugzClient) CreateAndInitializeDatabase(databasePath string) error {
 	db, err := sqlite.OpenConn(databasePath, 0)
 	if err != nil {
 		log.Fatalf("Error opening database: %v", err)
 	}
+
+	bc.db = db // Set the db connection to the BugzClient's db field
 
 	// Read the schema from the embedded file
 	schema, err := schemaFS.ReadFile("schema.sql")
@@ -310,7 +296,7 @@ func CreateAndInitializeDatabase(databasePath string) (*sqlite.Conn, error) {
 	if err := sqlitex.ExecScript(db, string(schema)); err != nil {
 		log.Fatalf("Error creating table: %v", err)
 	}
-	return db, nil
+	return nil
 }
 
 func GetDistinctCreators(db *sqlite.Conn) ([]string, error) {

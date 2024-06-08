@@ -5,3 +5,8 @@ CREATE TABLE IF NOT EXISTS bugs (
     Summary TEXT,
     OtherFieldsJSON TEXT
 );
+
+CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY,
+    Creator TEXT NOT NULL UNIQUE
+);

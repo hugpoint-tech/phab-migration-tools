@@ -1,5 +1,6 @@
 package database
 
+/*
 import (
 	"context"
 	"encoding/json"
@@ -95,7 +96,7 @@ func (db *DB) GetUsers(ctx context.Context) ([]bugz.User, error) {
 
 	result := []bugz.User{}
 	err := sqlitex.ExecuteTransient(conn, `
-	SELECT 
+	SELECT
 		id,
 		email,
 		name,
@@ -240,7 +241,7 @@ func (db *DB) GetBugs(ctx context.Context, bugsChan chan bugz.Bug) error {
 	defer fmt.Println()
 
 	err := sqlitex.ExecuteTransient(conn, `
-	SELECT 
+	SELECT
 		id,
 		dupe_of,
 		product,
@@ -508,4 +509,4 @@ func createTables(conn *sqlite.Conn) error {
 	}
 
 	return nil
-}
+}*/
