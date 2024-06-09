@@ -81,3 +81,21 @@ type Flag struct {
 	Setter           string `json:"setter"`
 	Requestee        string `json:"requestee,omitempty"`
 }
+
+type Comment struct {
+	ID           int    `json:"id"`
+	BugID        int    `json:"bug_id"`
+	AttachmentID int    `json:"attachment_id"`
+	CreationTime string `json:"creation_time"`
+	Creator      string `json:"creator"`
+	Text         string `json:"text"`
+}
+
+type Attachment struct {
+	ID           int    `json:"id"`
+	BugID        int    `json:"bug_id"`
+	CreationTime string `json:"creation_time"`
+	Creator      string `json:"creator"`
+	Summary      string `json:"summary"`
+	Data         []byte `json:"data"`
+}

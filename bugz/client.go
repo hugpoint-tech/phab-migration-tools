@@ -143,6 +143,14 @@ func (bc *BugzClient) DownloadBugzillaBugs() error { // Make URL to bugs
 			if err := bc.InsertBug(bug); err != nil {
 				return fmt.Errorf("error inserting bug %d: %v", bug.ID, err)
 			}
+
+			// Download comments and attachments for each bug
+			if err := bc.DownloadBugzillaComments(bug); err != nil {
+				return fmt.Errorf("error downloading comments for bug %d: %v", bug.ID, err)
+			}
+			if err := bc.DownloadBugzillaAttachments(bug); err != nil {
+				return fmt.Errorf("error downloading attachments for bug %d: %v", bug.ID, err)
+			}
 		}
 
 		// Check if there are more pages
@@ -318,4 +326,82 @@ func GetDistinctCreators(db *sqlite.Conn) ([]string, error) {
 	}
 
 	return creators, nil
+}
+
+func (bc *BugzClient) DownloadBugzillaComments(bug Bug) error {
+	apiURL := fmt.Sprintf("%s/bug/%d/comment", bc.URL, bug.ID)
+	params := url.Values{}
+	params.Set("token", bc.token)
+
+	fullURL := apiURL + "?" + params.Encode()
+	response, err := bc.http.Get(fullURL)
+	if err != nil {
+		return fmt.Errorf("error making GET request to %s: %v", fullURL, err)
+	}
+	defer response.Body.Close()
+
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		return fmt.Errorf("error reading response body from %s: %v", fullURL, err)
+	}
+
+	var commentsResponse struct {
+		Bugs map[int]struct {
+			Comments []Comment `json:"comments"`
+		} `json:"bugs"`
+	}
+	if err := json.Unmarshal(body, &commentsResponse); err != nil {
+		return fmt.Errorf("error decoding JSON: %v", err)
+	}
+
+	comments := commentsResponse.Bugs[bug.ID].Comments
+	insertQuery := `INSERT INTO comments (id, bug_id, attachment_id, creation_time, creator, text) VALUES (?1, ?2, ?3, ?4, ?5, ?6)`
+	for _, comment := range comments {
+		execOptions := sqlitex.ExecOptions{
+			Args: []interface{}{comment.ID, comment.BugID, comment.AttachmentID, comment.CreationTime, comment.Creator, comment.Text},
+		}
+		if err := sqlitex.Execute(bc.db, insertQuery, &execOptions); err != nil {
+			return fmt.Errorf("error inserting comment: %v", err)
+		}
+	}
+
+	return nil
+}
+
+func (bc *BugzClient) DownloadBugzillaAttachments(bug Bug) error {
+	apiURL := fmt.Sprintf("%s/bug/%d/attachment", bc.URL, bug.ID)
+	params := url.Values{}
+	params.Set("token", bc.token)
+
+	fullURL := apiURL + "?" + params.Encode()
+	response, err := bc.http.Get(fullURL)
+	if err != nil {
+		return fmt.Errorf("error making GET request to %s: %v", fullURL, err)
+	}
+	defer response.Body.Close()
+
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		return fmt.Errorf("error reading response body from %s: %v", fullURL, err)
+	}
+
+	var attachmentsResponse struct {
+		Bugs map[int][]Attachment `json:"bugs"`
+	}
+	if err := json.Unmarshal(body, &attachmentsResponse); err != nil {
+		return fmt.Errorf("error decoding JSON: %v", err)
+	}
+
+	attachments := attachmentsResponse.Bugs[bug.ID]
+	insertQuery := `INSERT INTO attachments (id, bug_id, creation_time, creator, summary, data) VALUES (?1, ?2, ?3, ?4, ?5, ?6)`
+	for _, attachment := range attachments {
+		execOptions := sqlitex.ExecOptions{
+			Args: []interface{}{attachment.ID, attachment.BugID, attachment.CreationTime, attachment.Creator, attachment.Summary, attachment.Data},
+		}
+		if err := sqlitex.Execute(bc.db, insertQuery, &execOptions); err != nil {
+			return fmt.Errorf("error inserting attachment: %v", err)
+		}
+	}
+
+	return nil
 }
