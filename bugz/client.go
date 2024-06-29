@@ -350,7 +350,13 @@ func (bc *BugzClient) DownloadBugzillaComments(bugID int64) error {
 
 	for _, comment := range comments {
 		execOptions := sqlitex.ExecOptions{
-			Args: []interface{}{comment.ID, comment.BugID, comment.AttachmentID, comment.CreationTime, comment.Creator, comment.Text},
+			Args: []interface{}{
+				comment.ID,
+				comment.BugID,
+				comment.AttachmentID,
+				comment.CreationTime,
+				comment.Creator,
+				comment.Text},
 		}
 		if err := sqlitex.Execute(bc.Db, string(insertQuery), &execOptions); err != nil {
 			return fmt.Errorf("error inserting comment: %v", err)
@@ -389,7 +395,13 @@ func (bc *BugzClient) DownloadBugzillaAttachments(bugID int64) error {
 
 	for _, attachment := range attachments {
 		execOptions := sqlitex.ExecOptions{
-			Args: []interface{}{attachment.ID, attachment.BugID, attachment.CreationTime, attachment.Creator, attachment.Summary, attachment.Data},
+			Args: []interface{}{
+				attachment.ID,
+				attachment.BugID,
+				attachment.CreationTime,
+				attachment.Creator,
+				attachment.Summary,
+				attachment.Data},
 		}
 		if err := sqlitex.Execute(bc.Db, string(insertQuery), &execOptions); err != nil {
 			return fmt.Errorf("error inserting attachment: %v", err)
@@ -401,7 +413,7 @@ func (bc *BugzClient) DownloadBugzillaAttachments(bugID int64) error {
 
 func FetchBugsFromDatabase(db *sqlite.Conn) ([]Bug, error) {
 	var bugs []Bug
-	query := "SELECT id FROM bugs" // Adjust query as per your schema
+	query := "SELECT id FROM bugs"
 	stmt := db.Prep(query)
 	defer stmt.Finalize()
 
