@@ -99,3 +99,13 @@ type Attachment struct {
 	Summary      string `json:"summary"`
 	Data         []byte `json:"data"`
 }
+
+type CommentsResponse struct {
+	Bugs map[int]struct {
+		Comments []Comment `json:"comments"`
+	} `json:"bugs"`
+}
+
+type AttachmentsResponse struct {
+	Bugs map[int][]Attachment `json:"bugs"`
+}
