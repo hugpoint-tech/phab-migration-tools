@@ -82,5 +82,8 @@ func printHelp() { // not sure about functions descriptions
 		"bugzilla-show-bugs - shows bugzilla bugs\n" +
 		"bugzilla-list-bugs - displays downloaded bugs\n" +
 		"bugzilla-download-users - downloads users from bugzilla\n" +
+		"bugzilla-download-comments - downloads comments from bugs db\n" +
+		"bugzilla-download-attachments - downloads attachments from bugs db\n" +
 		"help - shows available commands")
+
 }
