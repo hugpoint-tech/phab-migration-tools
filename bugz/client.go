@@ -31,7 +31,7 @@ func NewBugzClient(databasePath string) (*BugzClient, error) {
 	login := os.Getenv("BUGZILLA_LOGIN") //Retrieve env var values and check if they are empty
 	password := os.Getenv("BUGZILLA_PASSWORD")
 	if login == "" || password == "" {
-		panic("BUGZILLA_LOGIN or BUGZILLA_PASSWORD is not set")
+		log.Fatal("BUGZILLA_LOGIN or BUGZILLA_PASSWORD is not set")
 	}
 
 	// Create and initialize the database
@@ -45,7 +45,7 @@ func NewBugzClient(databasePath string) (*BugzClient, error) {
 		token: "",
 		http:  &http.Client{},
 		Db:    db,
-  }
+	}
 
 	formData := url.Values{}
 	formData.Set("login", login)
@@ -272,7 +272,7 @@ func (bc *BugzClient) DownloadBugzillaUsers() error {
 			Args: []interface{}{user},
 		}
 
-    if err := sqlitex.Execute(bc.Db, string(insertQuery), &execOptions); err != nil {
+		if err := sqlitex.Execute(bc.Db, string(insertQuery), &execOptions); err != nil {
 			return fmt.Errorf("error inserting user: %v", err)
 		}
 	}
@@ -290,8 +290,6 @@ func CreateAndInitializeDatabase(databasePath string) (*sqlite.Conn, error) {
 		return nil, fmt.Errorf("error opening database: %v", err)
 	}
 
-	bc.db = db // Set the db connection to the BugzClient's db field
-
 	// Read the schema from the embedded file
 	schema, err := schemaFS.ReadFile("schema.sql")
 	if err != nil {
@@ -299,9 +297,9 @@ func CreateAndInitializeDatabase(databasePath string) (*sqlite.Conn, error) {
 	}
 
 	if err := sqlitex.ExecScript(db, string(schema)); err != nil {
-		return nil, fmt.Errorf("error creating table: %v", err)
+		return nil, fmt.Errorf("error applying schema: %v", err)
 	}
-	return nil
+	return db, nil
 }
 
 func GetDistinctCreators(db *sqlite.Conn) ([]string, error) {

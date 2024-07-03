@@ -1,0 +1,1 @@
+INSERT OR IGNORE INTO users (Creator) VALUES (?1);
