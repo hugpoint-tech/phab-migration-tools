@@ -10,7 +10,7 @@ func TestCreateAndInitializeDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create and initialize database: %v", err)
 	}
-	defer bc.db.Close()
+	defer db.Close()
 
 	// Define the execOptions for the insert query
 	execOptions := sqlitex.ExecOptions{
@@ -22,7 +22,7 @@ func TestCreateAndInitializeDatabase(t *testing.T) {
 		t.Fatalf("Failed to read insert query: %v", err)
 	}
 
-	if err := sqlitex.ExecuteTransient(bc.db, string(insertQuery), &execOptions); err != nil {
+	if err := sqlitex.ExecuteTransient(db, string(insertQuery), &execOptions); err != nil {
 		t.Fatalf("Error executing insert statement: %v", err)
 	}
 
@@ -32,7 +32,7 @@ func TestCreateAndInitializeDatabase(t *testing.T) {
 		t.Fatalf("Failed to read select query: %v", err)
 	}
 
-	stmt, err := bc.db.Prepare(string(selectQuery))
+	stmt, err := db.Prepare(string(selectQuery))
 
 	if err != nil {
 		t.Fatalf("Failed to prepare select statement: %v", err)
@@ -67,7 +67,7 @@ func TestGetDistinctCreators(t *testing.T) {
 
 		t.Fatalf("Failed to create and initialize database: %v", err)
 	}
-	defer bc.db.Close()
+	defer db.Close()
 
 	sampleData := [][]interface{}{
 		{1, "2077-10-23 09:42:00", "John Dead", "Sample Bug", "{}"},
@@ -81,12 +81,12 @@ func TestGetDistinctCreators(t *testing.T) {
 	}
 
 	for _, args := range sampleData {
-		if err := sqlitex.ExecuteTransient(bc.db, string(insertQuery), &sqlitex.ExecOptions{Args: args}); err != nil {
+		if err := sqlitex.ExecuteTransient(db, string(insertQuery), &sqlitex.ExecOptions{Args: args}); err != nil {
 			t.Fatalf("Error executing insert statement: %v", err)
 		}
 	}
 
-	creators, err := GetDistinctCreators(bc.db)
+	creators, err := GetDistinctCreators(db)
 	if err != nil {
 		t.Fatalf("Failed to get distinct creators: %v", err)
 	}

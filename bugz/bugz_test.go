@@ -3,22 +3,22 @@ package bugz
 import "testing"
 
 func TestExtractIDs(t *testing.T) {
-	
+
 	bug := Bug{
 		AssignedToDetail: User{ID: 101},
 		CCDetail:         []User{{ID: 102}, {ID: 103}},
 		CreatorDetail:    User{ID: 104},
 	}
-	
+
 	expectedIDs := map[int]User{
 		101: {ID: 101},
 		102: {ID: 102},
 		103: {ID: 103},
 		104: {ID: 104},
 	}
-	
+
 	actualIDs := extractIDs(bug)
-	
+
 	if len(actualIDs) != len(expectedIDs) {
 		t.Errorf("Number of actual IDs does not match number of expected IDs")
 		return
