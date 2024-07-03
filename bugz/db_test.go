@@ -6,8 +6,8 @@ import (
 )
 
 func TestCreateAndInitializeDatabase(t *testing.T) {
-	bc := &BugzClient{}
-	if err := bc.CreateAndInitializeDatabase(":memory:"); err != nil {
+	db, err := CreateAndInitializeDatabase(":memory:")
+	if err != nil {
 		t.Fatalf("Failed to create and initialize database: %v", err)
 	}
 	defer bc.db.Close()
@@ -61,8 +61,10 @@ func TestCreateAndInitializeDatabase(t *testing.T) {
 }
 
 func TestGetDistinctCreators(t *testing.T) {
-	bc := &BugzClient{}
-	if err := bc.CreateAndInitializeDatabase(":memory:"); err != nil {
+
+	db, err := CreateAndInitializeDatabase(":memory:")
+	if err != nil {
+
 		t.Fatalf("Failed to create and initialize database: %v", err)
 	}
 	defer bc.db.Close()

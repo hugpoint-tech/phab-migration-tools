@@ -19,7 +19,7 @@ type BugzClient struct {
 	token string
 	URL   string
 	http  *http.Client
-	db    *sqlite.Conn
+	Db    *sqlite.Conn
 }
 
 type BugzLoginResponse struct {
@@ -27,23 +27,25 @@ type BugzLoginResponse struct {
 	Token string `json:"token"`
 }
 
-func NewBugzClient(databasePath string) *BugzClient {
+func NewBugzClient(databasePath string) (*BugzClient, error) {
 	login := os.Getenv("BUGZILLA_LOGIN") //Retrieve env var values and check if they are empty
 	password := os.Getenv("BUGZILLA_PASSWORD")
 	if login == "" || password == "" {
 		panic("BUGZILLA_LOGIN or BUGZILLA_PASSWORD is not set")
 	}
 
+	// Create and initialize the database
+	db, err := CreateAndInitializeDatabase(databasePath)
+	if err != nil {
+		return nil, fmt.Errorf("error opening database: %v", err)
+	}
+
 	bc := &BugzClient{
 		URL:   "https://bugs.freebsd.org/bugzilla/rest",
 		token: "",
 		http:  &http.Client{},
-	}
-
-	// Create and initialize the database
-	if err := bc.CreateAndInitializeDatabase(databasePath); err != nil {
-		log.Fatalf("Error opening database: %v", err)
-	}
+		Db:    db,
+  }
 
 	formData := url.Values{}
 	formData.Set("login", login)
@@ -69,7 +71,7 @@ func NewBugzClient(databasePath string) *BugzClient {
 	}
 	bc.token = loginResponse.Token
 
-	return bc
+	return bc, nil
 }
 
 func (bc *BugzClient) InsertBug(bug Bug) error {
@@ -89,7 +91,7 @@ func (bc *BugzClient) InsertBug(bug Bug) error {
 		return err
 	}
 
-	if err := sqlitex.ExecuteTransient(bc.db, string(insertQuery), &execOptions); err != nil {
+	if err := sqlitex.ExecuteTransient(bc.Db, string(insertQuery), &execOptions); err != nil {
 		fmt.Errorf("error executing insert statement: %v", err)
 	}
 	return nil
@@ -252,7 +254,8 @@ func extractIDs(bug Bug) map[int]User {
 func (bc *BugzClient) DownloadBugzillaUsers() error {
 
 	// Execute distinct query on the bugs table to retrieve unique user data
-	users, err := GetDistinctCreators(bc.db)
+	users, err := GetDistinctCreators(bc.Db)
+
 	if err != nil {
 		return fmt.Errorf("error getting distinct users: %v", err)
 	}
@@ -268,7 +271,8 @@ func (bc *BugzClient) DownloadBugzillaUsers() error {
 		execOptions := sqlitex.ExecOptions{
 			Args: []interface{}{user},
 		}
-		if err := sqlitex.Execute(bc.db, string(insertQuery), &execOptions); err != nil {
+
+    if err := sqlitex.Execute(bc.Db, string(insertQuery), &execOptions); err != nil {
 			return fmt.Errorf("error inserting user: %v", err)
 		}
 	}
@@ -279,10 +283,11 @@ func (bc *BugzClient) DownloadBugzillaUsers() error {
 //go:embed *.sql
 var schemaFS embed.FS
 
-func (bc *BugzClient) CreateAndInitializeDatabase(databasePath string) error {
+// CreateAndInitializeDatabase as a standalone function
+func CreateAndInitializeDatabase(databasePath string) (*sqlite.Conn, error) {
 	db, err := sqlite.OpenConn(databasePath, 0)
 	if err != nil {
-		log.Fatalf("Error opening database: %v", err)
+		return nil, fmt.Errorf("error opening database: %v", err)
 	}
 
 	bc.db = db // Set the db connection to the BugzClient's db field
@@ -290,11 +295,11 @@ func (bc *BugzClient) CreateAndInitializeDatabase(databasePath string) error {
 	// Read the schema from the embedded file
 	schema, err := schemaFS.ReadFile("schema.sql")
 	if err != nil {
-		log.Fatalf("Failed to read schema: %v", err)
+		return nil, fmt.Errorf("failed to read schema: %v", err)
 	}
 
 	if err := sqlitex.ExecScript(db, string(schema)); err != nil {
-		log.Fatalf("Error creating table: %v", err)
+		return nil, fmt.Errorf("error creating table: %v", err)
 	}
 	return nil
 }
@@ -318,4 +323,115 @@ func GetDistinctCreators(db *sqlite.Conn) ([]string, error) {
 	}
 
 	return creators, nil
+}
+
+func (bc *BugzClient) DownloadBugzillaComments(bugID int64) error {
+	apiURL := fmt.Sprintf("%s/bug/%d/comment", bc.URL, bugID)
+	params := url.Values{}
+	params.Set("token", bc.token)
+
+	fullURL := apiURL + "?" + params.Encode()
+	response, err := bc.http.Get(fullURL)
+	if err != nil {
+		return fmt.Errorf("error making GET request to %s: %v", fullURL, err)
+	}
+	defer response.Body.Close()
+
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		return fmt.Errorf("error reading response body from %s: %v", fullURL, err)
+	}
+
+	var commentsResponse CommentsResponse
+	if err := json.Unmarshal(body, &commentsResponse); err != nil {
+		return fmt.Errorf("error decoding JSON: %v", err)
+	}
+
+	comments := commentsResponse.Bugs[int(bugID)].Comments
+
+	// Read the insert query from the embedded file
+	insertQuery, err := schemaFS.ReadFile("insert_comments.sql")
+
+	for _, comment := range comments {
+		execOptions := sqlitex.ExecOptions{
+			Args: []interface{}{
+				comment.ID,
+				comment.BugID,
+				comment.AttachmentID,
+				comment.CreationTime,
+				comment.Creator,
+				comment.Text},
+		}
+		if err := sqlitex.Execute(bc.Db, string(insertQuery), &execOptions); err != nil {
+			return fmt.Errorf("error inserting comment: %v", err)
+		}
+	}
+
+	return nil
+}
+
+func (bc *BugzClient) DownloadBugzillaAttachments(bugID int64) error {
+	apiURL := fmt.Sprintf("%s/bug/%d/attachment", bc.URL, bugID)
+	params := url.Values{}
+	params.Set("token", bc.token)
+
+	fullURL := apiURL + "?" + params.Encode()
+	response, err := bc.http.Get(fullURL)
+	if err != nil {
+		return fmt.Errorf("error making GET request to %s: %v", fullURL, err)
+	}
+	defer response.Body.Close()
+
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		return fmt.Errorf("error reading response body from %s: %v", fullURL, err)
+	}
+
+	var attachmentsResponse AttachmentsResponse
+	if err := json.Unmarshal(body, &attachmentsResponse); err != nil {
+		return fmt.Errorf("error decoding JSON: %v", err)
+	}
+
+	attachments := attachmentsResponse.Bugs[int(bugID)]
+
+	// Read the insert query from the embedded file
+	insertQuery, err := schemaFS.ReadFile("insert_attachments.sql")
+
+	for _, attachment := range attachments {
+		execOptions := sqlitex.ExecOptions{
+			Args: []interface{}{
+				attachment.ID,
+				attachment.BugID,
+				attachment.CreationTime,
+				attachment.Creator,
+				attachment.Summary,
+				attachment.Data},
+		}
+		if err := sqlitex.Execute(bc.Db, string(insertQuery), &execOptions); err != nil {
+			return fmt.Errorf("error inserting attachment: %v", err)
+		}
+	}
+
+	return nil
+}
+
+func FetchBugsFromDatabase(db *sqlite.Conn) ([]Bug, error) {
+	var bugs []Bug
+	query := "SELECT id FROM bugs"
+	stmt := db.Prep(query)
+	defer stmt.Finalize()
+
+	for {
+		hasNext, err := stmt.Step()
+		if err != nil {
+			return nil, fmt.Errorf("error fetching bugs: %v", err)
+		}
+		if !hasNext {
+			break
+		}
+		bugID := stmt.ColumnInt64(0)
+		bugs = append(bugs, Bug{ID: int(bugID)})
+	}
+
+	return bugs, nil
 }

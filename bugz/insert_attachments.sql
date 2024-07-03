@@ -1,0 +1,1 @@
+INSERT INTO attachments (id, bug_id, creation_time, creator, summary, data) VALUES (?1, ?2, ?3, ?4, ?5, ?6);
