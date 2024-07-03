@@ -29,4 +29,5 @@ CREATE TABLE IF NOT EXISTS attachments (
     summary TEXT,
     data BLOB,
     FOREIGN KEY(bug_id) REFERENCES bugs(id)
+
 );
