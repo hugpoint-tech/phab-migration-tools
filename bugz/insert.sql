@@ -1,1 +1,1 @@
-INSERT INTO bugs (id, CreationTime, Creator, Summary, OtherFieldsJSON) VALUES (?, ?, ?, ?, ?);
+INSERT INTO bugs (id, CreationTime, Creator, OtherFieldsJSON) VALUES (?, ?, ?, ?);
