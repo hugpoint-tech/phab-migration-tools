@@ -316,7 +316,8 @@ func GetDistinctUsers(db *sqlite.Conn) ([]User, error) {
 		log.Fatalf("Failed to read query: %v", err)
 	}
 
-	var users []User
+	// Use a map to store unique users by their email
+	userMap := make(map[string]User)
 	execOptions := &sqlitex.ExecOptions{
 		ResultFunc: func(stmt *sqlite.Stmt) error {
 			user := User{
@@ -327,7 +328,8 @@ func GetDistinctUsers(db *sqlite.Conn) ([]User, error) {
 			if user.Email == "" && user.Name == "" && user.RealName == "" {
 				log.Printf("Empty user detected: %+v", user)
 			} else {
-				users = append(users, user)
+				// Use the email as the key for uniqueness
+				userMap[user.Email] = user
 			}
 			return nil
 		},
@@ -335,6 +337,12 @@ func GetDistinctUsers(db *sqlite.Conn) ([]User, error) {
 
 	if err := sqlitex.ExecuteTransient(db, string(query), execOptions); err != nil {
 		log.Fatalf("Failed to execute query: %v", err)
+	}
+
+	// Convert the map to a slice
+	users := make([]User, 0, len(userMap))
+	for _, user := range userMap {
+		users = append(users, user)
 	}
 
 	// Debug: Print all retrieved users
