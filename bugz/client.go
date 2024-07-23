@@ -324,13 +324,22 @@ func GetDistinctUsers(db *sqlite.Conn) ([]User, error) {
 				Name:     stmt.ColumnText(1),
 				RealName: stmt.ColumnText(2),
 			}
-			users = append(users, user)
+			if user.Email == "" && user.Name == "" && user.RealName == "" {
+				log.Printf("Empty user detected: %+v", user)
+			} else {
+				users = append(users, user)
+			}
 			return nil
 		},
 	}
 
 	if err := sqlitex.ExecuteTransient(db, string(query), execOptions); err != nil {
 		log.Fatalf("Failed to execute query: %v", err)
+	}
+
+	// Debug: Print all retrieved users
+	for _, user := range users {
+		fmt.Printf("Retrieved user: %+v\n", user)
 	}
 
 	return users, nil

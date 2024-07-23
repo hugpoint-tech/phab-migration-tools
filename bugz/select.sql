@@ -1,1 +1,1 @@
-SELECT id, CreationTime, Creator, Summary, OtherFieldsJSON FROM bugs WHERE id = 1;
+SELECT id, CreationTime, Creator, OtherFieldsJSON FROM bugs WHERE id = 1;
