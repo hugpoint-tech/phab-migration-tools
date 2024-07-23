@@ -1,6 +1,7 @@
 package bugz
 
 import (
+	"fmt"
 	"testing"
 	"zombiezen.com/go/sqlite/sqlitex"
 )
@@ -14,7 +15,7 @@ func TestCreateAndInitializeDatabase(t *testing.T) {
 
 	// Define the execOptions for the insert query
 	execOptions := sqlitex.ExecOptions{
-		Args: []interface{}{1, "2077-10-23 09:42:00", "John Dead", "Sample Bug", "{}"},
+		Args: []interface{}{1, "2077-10-23 09:42:00", "John Dead", "{}"},
 	}
 
 	insertQuery, err := schemaFS.ReadFile("insert.sql")
@@ -51,28 +52,26 @@ func TestCreateAndInitializeDatabase(t *testing.T) {
 	id := stmt.ColumnInt64(0)
 	creationTime := stmt.ColumnText(1)
 	creator := stmt.ColumnText(2)
-	summary := stmt.ColumnText(3)
-	otherFieldsJSON := stmt.ColumnText(4)
+	otherFieldsJSON := stmt.ColumnText(3)
 
 	// Verify the retrieved data matches the sample data
-	if id != 1 || creationTime != "2077-10-23 09:42:00" || creator != "John Dead" || summary != "Sample Bug" || otherFieldsJSON != "{}" {
+	if id != 1 || creationTime != "2077-10-23 09:42:00" || creator != "John Dead" || otherFieldsJSON != "{}" {
 		t.Fatalf("Retrieved data does not match sample data")
 	}
 }
 
-func TestGetDistinctCreators(t *testing.T) {
-
+func TestGetDistinctUsers(t *testing.T) {
 	db, err := CreateAndInitializeDatabase(":memory:")
 	if err != nil {
-
 		t.Fatalf("Failed to create and initialize database: %v", err)
 	}
 	defer db.Close()
 
+	// Insert sample data
 	sampleData := [][]interface{}{
-		{1, "2077-10-23 09:42:00", "John Dead", "Sample Bug", "{}"},
-		{2, "2077-10-23 10:00:00", "Jane Alive", "Another Bug", "{}"},
-		{3, "2077-10-23 10:15:00", "John Dead", "Yet Another Bug", "{}"},
+		{1, "2077-10-23 09:42:00", "john.doe@example.com", `{"assigned_to": "john.doe@example.com", "assigned_to_detail": {"email": "john.doe@example.com", "name": "John Doe", "real_name": "John Doe"}}`},
+		{2, "2077-10-23 10:00:00", "jane.alive@example.com", `{"creator_detail": {"email": "jane.alive@example.com", "name": "Jane Alive", "real_name": "Jane Alive"}}`},
+		{3, "2077-10-23 01:42:00", "john.doe@example.com", `{"assigned_to": "john.doe@example.com", "assigned_to_detail": {"email": "john.doe@example.com", "name": "John Doe", "real_name": "John Doe"}}`},
 	}
 
 	insertQuery, err := schemaFS.ReadFile("insert.sql")
@@ -86,18 +85,49 @@ func TestGetDistinctCreators(t *testing.T) {
 		}
 	}
 
-	creators, err := GetDistinctCreators(db)
+	users, err := GetDistinctUsers(db)
 	if err != nil {
-		t.Fatalf("Failed to get distinct creators: %v", err)
+		t.Fatalf("Failed to get distinct users: %v", err)
 	}
 
-	expectedCreators := []string{"John Dead", "Jane Alive"}
-	if len(creators) != len(expectedCreators) {
-		t.Fatalf("Expected %v creators, got %v", len(expectedCreators), len(creators))
+	expectedUsers := []User{
+		{Email: "jane.alive@example.com", Name: "Jane Alive", RealName: "Jane Alive"},
+		{Email: "john.doe@example.com", Name: "John Doe", RealName: "John Doe"},
 	}
-	for i, creator := range creators {
-		if creator != expectedCreators[i] {
-			t.Fatalf("Expected creator %v, got %v", expectedCreators[i], creator)
+
+	// Create a map of expected users for quick lookup
+	expectedUserMap := make(map[string]User)
+	for _, u := range expectedUsers {
+		expectedUserMap[u.Email] = u
+	}
+
+	// Function to compare two User structs
+	compareUsers := func(a, b User) bool {
+		return a.Email == b.Email && a.Name == b.Name && a.RealName == b.RealName
+	}
+
+	// Convert users to a map for easy comparison
+	retrievedUserMap := make(map[string]User)
+	for _, user := range users {
+		retrievedUserMap[user.Email] = user
+	}
+
+	// Check if all expected users are present in the results
+	for _, expectedUser := range expectedUsers {
+		if retrievedUser, found := retrievedUserMap[expectedUser.Email]; !found || !compareUsers(retrievedUser, expectedUser) {
+			t.Errorf("Missing or unexpected user: got %+v, expected %+v", retrievedUserMap[expectedUser.Email], expectedUser)
 		}
+	}
+
+	// Check if there are no extra unexpected users
+	for _, user := range users {
+		if _, found := expectedUserMap[user.Email]; !found {
+			t.Errorf("Unexpected user found: %+v", user)
+		}
+	}
+
+	// Debug: Print all retrieved users
+	for _, user := range users {
+		fmt.Printf("Retrieved user: %+v\n", user)
 	}
 }

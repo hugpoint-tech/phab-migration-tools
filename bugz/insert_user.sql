@@ -1,1 +1,1 @@
-INSERT OR IGNORE INTO users (Creator) VALUES (?1);
+INSERT OR IGNORE INTO users (Email, Name, RealName) VALUES (?1, ?2, ?3);

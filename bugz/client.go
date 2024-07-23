@@ -83,7 +83,7 @@ func (bc *BugzClient) InsertBug(bug Bug) error {
 
 	// Define the execOptions for the insert query
 	execOptions := sqlitex.ExecOptions{
-		Args: []interface{}{bug.ID, bug.CreationTime, bug.Creator, bug.Summary, string(bugJSON)},
+		Args: []interface{}{bug.ID, bug.CreationTime, bug.Creator, string(bugJSON)},
 	}
 
 	insertQuery, err := schemaFS.ReadFile("insert.sql")
@@ -110,6 +110,7 @@ func (bc *BugzClient) DownloadBugzillaBugs() error { // Make URL to bugs
 	// Specify the pagination parameters
 	pageSize := 1000
 	pageNumber := 0
+	totalBugs := 0
 
 	for {
 		// Create query parameters
@@ -146,6 +147,12 @@ func (bc *BugzClient) DownloadBugzillaBugs() error { // Make URL to bugs
 				return fmt.Errorf("error inserting bug %d: %v", bug.ID, err)
 			}
 		}
+
+		// Update the total number of bugs downloaded
+		totalBugs += len(bugsResponse["bugs"])
+
+		// Print the number of bugs downloaded after each page
+		fmt.Printf("Total bugs downloaded: %d\n", totalBugs)
 
 		// Check if there are more pages
 		if len(bugsResponse["bugs"]) < pageSize {
@@ -254,7 +261,7 @@ func extractIDs(bug Bug) map[int]User {
 func (bc *BugzClient) DownloadBugzillaUsers() error {
 
 	// Execute distinct query on the bugs table to retrieve unique user data
-	users, err := GetDistinctCreators(bc.Db)
+	users, err := GetDistinctUsers(bc.Db)
 
 	if err != nil {
 		return fmt.Errorf("error getting distinct users: %v", err)
@@ -265,18 +272,19 @@ func (bc *BugzClient) DownloadBugzillaUsers() error {
 	if err != nil {
 		return fmt.Errorf("failed to read insert query: %v", err)
 	}
-
+	userCount := 0
 	// Insert each user into the users table
 	for _, user := range users {
 		execOptions := sqlitex.ExecOptions{
-			Args: []interface{}{user},
+			Args: []interface{}{user.Email, user.Name, user.RealName},
 		}
 
 		if err := sqlitex.Execute(bc.Db, string(insertQuery), &execOptions); err != nil {
 			return fmt.Errorf("error inserting user: %v", err)
 		}
+		userCount++
 	}
-	fmt.Println("Unique user data saved to the users table in the database")
+	fmt.Printf("Downloaded %d unique users\n", userCount)
 	return nil
 }
 
@@ -302,16 +310,25 @@ func CreateAndInitializeDatabase(databasePath string) (*sqlite.Conn, error) {
 	return db, nil
 }
 
-func GetDistinctCreators(db *sqlite.Conn) ([]string, error) {
+func GetDistinctUsers(db *sqlite.Conn) ([]User, error) {
 	query, err := schemaFS.ReadFile("distinct.sql")
 	if err != nil {
 		log.Fatalf("Failed to read query: %v", err)
 	}
 
-	var creators []string
+	var users []User
 	execOptions := &sqlitex.ExecOptions{
 		ResultFunc: func(stmt *sqlite.Stmt) error {
-			creators = append(creators, stmt.ColumnText(0))
+			user := User{
+				Email:    stmt.ColumnText(0),
+				Name:     stmt.ColumnText(1),
+				RealName: stmt.ColumnText(2),
+			}
+			if user.Email == "" && user.Name == "" && user.RealName == "" {
+				log.Printf("Empty user detected: %+v", user)
+			} else {
+				users = append(users, user)
+			}
 			return nil
 		},
 	}
@@ -320,7 +337,12 @@ func GetDistinctCreators(db *sqlite.Conn) ([]string, error) {
 		log.Fatalf("Failed to execute query: %v", err)
 	}
 
-	return creators, nil
+	// Debug: Print all retrieved users
+	for _, user := range users {
+		fmt.Printf("Retrieved user: %+v\n", user)
+	}
+
+	return users, nil
 }
 
 func (bc *BugzClient) DownloadBugzillaComments(bugID int64) error {
@@ -349,7 +371,7 @@ func (bc *BugzClient) DownloadBugzillaComments(bugID int64) error {
 
 	// Read the insert query from the embedded file
 	insertQuery, err := schemaFS.ReadFile("insert_comments.sql")
-
+	commentCount := 0
 	for _, comment := range comments {
 		execOptions := sqlitex.ExecOptions{
 			Args: []interface{}{
@@ -363,8 +385,9 @@ func (bc *BugzClient) DownloadBugzillaComments(bugID int64) error {
 		if err := sqlitex.Execute(bc.Db, string(insertQuery), &execOptions); err != nil {
 			return fmt.Errorf("error inserting comment: %v", err)
 		}
+		commentCount++
 	}
-
+	fmt.Printf("Downloaded %d comments for bug %d\n", commentCount, bugID)
 	return nil
 }
 
@@ -394,7 +417,7 @@ func (bc *BugzClient) DownloadBugzillaAttachments(bugID int64) error {
 
 	// Read the insert query from the embedded file
 	insertQuery, err := schemaFS.ReadFile("insert_attachments.sql")
-
+	attachmentsCount := 0
 	for _, attachment := range attachments {
 		execOptions := sqlitex.ExecOptions{
 			Args: []interface{}{
@@ -408,8 +431,9 @@ func (bc *BugzClient) DownloadBugzillaAttachments(bugID int64) error {
 		if err := sqlitex.Execute(bc.Db, string(insertQuery), &execOptions); err != nil {
 			return fmt.Errorf("error inserting attachment: %v", err)
 		}
+		attachmentsCount++
 	}
-
+	fmt.Printf("Downloaded %d attachments for bug %d\n", attachmentsCount, bugID)
 	return nil
 }
 
