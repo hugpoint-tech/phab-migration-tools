@@ -362,24 +362,102 @@ func (bc *BugzClient) DownloadBugzillaComments(bugID int64) error {
 
 	// Read the insert query from the embedded file
 	insertQuery, err := schemaFS.ReadFile("insert_comments.sql")
-	commentCount := 0
-	for _, comment := range comments {
-		execOptions := sqlitex.ExecOptions{
-			Args: []interface{}{
-				comment.ID,
-				comment.BugID,
-				comment.AttachmentID,
-				comment.CreationTime,
-				comment.Creator,
-				comment.Text},
-		}
-		if err := sqlitex.Execute(bc.Db, string(insertQuery), &execOptions); err != nil {
-			return fmt.Errorf("error inserting comment: %v", err)
-		}
-		commentCount++
+	if err != nil {
+		return fmt.Errorf("failed to read insert query: %v", err)
 	}
+
+	const batchSize = 1000 // Adjust the batch size as needed
+	const numFields = 6    // Number of fields per comment
+	var batchArgs []interface{}
+	commentCount := 0
+	transactionActive := false
+
+	// Begin transaction
+	err = sqlitex.ExecuteTransient(bc.Db, "BEGIN", nil)
+	if err != nil {
+		return fmt.Errorf("error starting transaction: %v", err)
+	}
+	transactionActive = true
+
+	for _, comment := range comments {
+		batchArgs = append(batchArgs,
+			comment.ID,
+			comment.BugID,
+			comment.AttachmentID,
+			comment.CreationTime,
+			comment.Creator,
+			comment.Text)
+
+		// If we've collected enough arguments for a full batch, insert them
+		if len(batchArgs)/numFields >= batchSize {
+			// Create the batch insert query
+			batchInsertQuery := createBatchInsertQuery(string(insertQuery), batchSize)
+			execOptions := sqlitex.ExecOptions{Args: batchArgs}
+			if err := sqlitex.ExecuteTransient(bc.Db, batchInsertQuery, &execOptions); err != nil {
+				if transactionActive {
+					// Rollback transaction if there's an error
+					sqlitex.ExecuteTransient(bc.Db, "ROLLBACK", nil)
+					transactionActive = false
+				}
+				return fmt.Errorf("error inserting comment batch: %v", err)
+			}
+			batchArgs = batchArgs[:0] // Clear the batch
+			commentCount += batchSize
+		}
+	}
+
+	// Insert any remaining comments in the final batch
+	if len(batchArgs) > 0 {
+		batchInsertQuery := createBatchInsertQuery(string(insertQuery), len(batchArgs)/numFields)
+		execOptions := sqlitex.ExecOptions{Args: batchArgs}
+		if err := sqlitex.ExecuteTransient(bc.Db, batchInsertQuery, &execOptions); err != nil {
+			if transactionActive {
+				// Rollback transaction if there's an error
+				sqlitex.ExecuteTransient(bc.Db, "ROLLBACK", nil)
+				transactionActive = false
+			}
+			return fmt.Errorf("error inserting final comment batch: %v", err)
+		}
+		commentCount += len(batchArgs) / numFields
+	}
+
+	// Commit transaction
+	if transactionActive {
+		err = sqlitex.ExecuteTransient(bc.Db, "COMMIT", nil)
+		if err != nil {
+			if transactionActive {
+				// Rollback transaction if there's an error
+				err := sqlitex.ExecuteTransient(bc.Db, "ROLLBACK", nil)
+				if err != nil {
+					return err
+				}
+				transactionActive = false
+			}
+			return fmt.Errorf("error committing transaction: %v", err)
+		}
+		transactionActive = false
+	}
+
 	fmt.Printf("Downloaded %d comments for bug %d\n", commentCount, bugID)
 	return nil
+}
+
+// createBatchInsertQuery creates a batch insert query by repeating the base query placeholders
+func createBatchInsertQuery(baseQuery string, batchSize int) string {
+	// Extract the part of the base query that starts with "VALUES"
+	valuesIndex := strings.Index(baseQuery, "VALUES")
+	if valuesIndex == -1 {
+		log.Fatalf("Invalid base query, no VALUES clause found")
+	}
+	valuesClause := baseQuery[valuesIndex+len("VALUES "):]
+
+	// Remove the trailing semicolon from valuesClause if present
+	valuesClause = strings.TrimSuffix(valuesClause, ";")
+
+	// Construct the VALUES part of the query
+	values := strings.Repeat(valuesClause+",", batchSize)
+	values = values[:len(values)-1] // Remove the trailing comma
+	return baseQuery[:valuesIndex+len("VALUES ")] + values
 }
 
 func (bc *BugzClient) DownloadBugzillaAttachments(bugID int64) error {
