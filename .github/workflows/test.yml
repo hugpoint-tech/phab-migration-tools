@@ -9,7 +9,7 @@ jobs:
   test:
     name: Run Tests
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
@@ -17,7 +17,22 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v2
         with:
-          go-version: 1.21.1
+          go-version: 1.22.5
 
+      - name: Compile
+        run: go build -o super-migrator-9000 main.go
+        
       - name: Run tests
         run: go test bugz/*.go 
+        
+      - name: Download Bugs
+        run: ./super-migrator-9000 bugzilla-download-bugs
+
+      - name: Download Comments
+        run: ./super-migrator-9000 bugzilla-download-comments
+
+      - name: Download Attachments
+        run: ./super-migrator-9000 bugzilla-download-attachments
+
+      - name: Download Users
+        run: ./super-migrator-9000 bugzilla-download-users
