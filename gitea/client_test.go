@@ -1,97 +1,125 @@
 package main
 
 import (
-	"os"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
+	"time"
 )
 
-func TestGetUser(t *testing.T) {
-	baseURL := "https://gitcvt.hugpoint.tech/api/v1" // Ensure this URL is correct for your Gitea instance
-	apiToken := os.Getenv("GITEA_API_TOKEN")         // Store your API token in an environment variable
+// Helper function to create a mock server
+func newMockServer(responseCode int, responseBody interface{}) *httptest.Server {
+	handler := http.NewServeMux()
+	handler.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(responseCode)
+		if responseBody != nil {
+			respBody, _ := json.Marshal(responseBody)
+			w.Write(respBody)
+		}
+	})
+	return httptest.NewServer(handler)
+}
 
-	if apiToken == "" {
-		t.Fatal("GITEA_API_TOKEN environment variable is not set")
+// TestGetUser tests the GetUser method
+func TestGetUser(t *testing.T) {
+	mockUser := &User{
+		ID:        1,
+		UserName:  "testuser",
+		FullName:  "Test User",
+		Email:     "test@chsv.com",
+		AvatarURL: "http://chsv.com/avatar",
 	}
 
-	client := NewGiteaClient(baseURL, apiToken)
+	mockServer := newMockServer(http.StatusOK, mockUser)
+	defer mockServer.Close()
+
+	client := &Client{
+		url:         mockServer.URL,
+		accessToken: "dummy-token",
+		client:      &http.Client{},
+	}
+
 	user, err := client.GetUser()
 	if err != nil {
-		t.Fatalf("Failed to fetch user information: %v", err)
+		t.Fatalf("Failed to get user: %v", err)
 	}
 
-	if user == nil {
-		t.Fatal("User information is nil")
+	if user.UserName != "testuser" {
+		t.Errorf("Expected username to be 'testuser', got '%s'", user.UserName)
 	}
-
-	// Check some basic fields to ensure the user information is valid
-	if user.Login == "" {
-		t.Fatal("User login is empty")
-	}
-
-	if user.Email == "" {
-		t.Fatal("User email is empty")
-	}
-
-	// Print user information for debugging purposes
-	t.Logf("User ID: %d\n", user.ID)
-	t.Logf("Login: %s\n", user.Login)
-	t.Logf("Full Name: %s\n", user.FullName)
-	t.Logf("Email: %s\n", user.Email)
-	t.Logf("Avatar URL: %s\n", user.AvatarURL)
-}
-
-func TestListMyOrgs(t *testing.T) {
-	baseURL := "https://gitcvt.hugpoint.tech/api/v1" // Ensure this URL is correct for your Gitea instance
-	apiToken := os.Getenv("GITEA_API_TOKEN")         // Store your API token in an environment variable
-
-	if apiToken == "" {
-		t.Fatal("GITEA_API_TOKEN environment variable is not set")
-	}
-
-	client := NewGiteaClient(baseURL, apiToken)
-	orgs, _, err := client.ListMyOrgs(ListOrgsOptions{Page: 1, PerPage: 10})
-	if err != nil {
-		t.Fatalf("Failed to fetch organizations: %v", err)
-	}
-
-	if orgs == nil {
-		t.Fatal("Organizations list is nil")
-	}
-
-	if len(orgs) == 0 {
-		t.Fatal("Organizations list is empty")
-	}
-
-	// Print organizations for debugging purposes
-	for _, org := range orgs {
-		t.Logf("Organization ID: %d, Login: %s\n", org.ID, org.Login)
+	if user.Email != "test@chsv.com" {
+		t.Errorf("Expected email to be 'test@chsv.com', got '%s'", user.Email)
 	}
 }
 
+// TestListMyRepos tests the ListMyRepos method
 func TestListMyRepos(t *testing.T) {
-	baseURL := "https://gitcvt.hugpoint.tech/api/v1" // Ensure this URL is correct for your Gitea instance
-	apiToken := os.Getenv("GITEA_API_TOKEN")         // Store your API token in an environment variable
-
-	if apiToken == "" {
-		t.Fatal("GITEA_API_TOKEN environment variable is not set")
+	mockRepos := []*Repository{
+		{
+			ID:        1,
+			FullName:  "repo1",
+			CloneURL:  "http://chsv.com/repo1.git",
+			Owner:     &User{UserName: "owner1"},
+			Private:   false,
+			HasIssues: true,
+			HasWiki:   true,
+			Created:   time.Now(),
+			Updated:   time.Now(),
+		},
 	}
 
-	client := NewGiteaClient(baseURL, apiToken)
-	repos, _, err := client.ListMyRepos(ListReposOptions{Page: 1, PerPage: 10})
+	mockServer := newMockServer(http.StatusOK, mockRepos)
+	defer mockServer.Close()
+
+	client := &Client{
+		url:         mockServer.URL,
+		accessToken: "dummy-token",
+		client:      &http.Client{},
+	}
+
+	repos, _, err := client.ListMyRepos(ListReposOptions{ListOptions{Page: 1, PageSize: 10}})
 	if err != nil {
-		t.Fatalf("Failed to fetch repositories: %v", err)
+		t.Fatalf("Failed to list repositories: %v", err)
 	}
 
-	if repos == nil {
-		t.Fatal("Repositories list is nil")
+	if len(repos) != 1 {
+		t.Fatalf("Expected 1 repository, got %d", len(repos))
+	}
+	if repos[0].FullName != "repo1" {
+		t.Errorf("Expected repo full name to be 'repo1', got '%s'", repos[0].FullName)
+	}
+}
+
+// TestListMyOrgs tests the ListMyOrgs method
+func TestListMyOrgs(t *testing.T) {
+	mockOrgs := []*Organization{
+		{
+			ID:          1,
+			UserName:    "chsv1",
+			FullName:    "Organization chsvs",
+			Description: "Organization full of chsvs",
+		},
 	}
 
-	if len(repos) == 0 {
-		t.Fatal("Repositories list is empty")
+	mockServer := newMockServer(http.StatusOK, mockOrgs)
+	defer mockServer.Close()
+
+	client := &Client{
+		url:         mockServer.URL,
+		accessToken: "dummy-token",
+		client:      &http.Client{},
 	}
 
-	// Print repositories for debugging purposes
-	for _, repo := range repos {
-		t.Logf("Repository ID: %d, FullName: %s\n", repo.ID, repo.FullName)
+	orgs, _, err := client.ListMyOrgs(ListOrgsOptions{ListOptions{Page: 1, PageSize: 10}})
+	if err != nil {
+		t.Fatalf("Failed to list organizations: %v", err)
+	}
+
+	if len(orgs) != 1 {
+		t.Fatalf("Expected 1 organization, got %d", len(orgs))
+	}
+	if orgs[0].UserName != "chsv1" {
+		t.Errorf("Expected organization username to be 'org1', got '%s'", orgs[0].UserName)
 	}
 }
