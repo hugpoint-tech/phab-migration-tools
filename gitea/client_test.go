@@ -1,125 +1,132 @@
 package main
 
 import (
-	"encoding/json"
-	"net/http"
-	"net/http/httptest"
+	"os"
 	"testing"
-	"time"
+
+	"code.gitea.io/sdk/gitea"
 )
 
-// Helper function to create a mock server
-func newMockServer(responseCode int, responseBody interface{}) *httptest.Server {
-	handler := http.NewServeMux()
-	handler.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(responseCode)
-		if responseBody != nil {
-			respBody, _ := json.Marshal(responseBody)
-			w.Write(respBody)
-		}
-	})
-	return httptest.NewServer(handler)
-}
-
-// TestGetUser tests the GetUser method
 func TestGetUser(t *testing.T) {
-	mockUser := &User{
-		ID:        1,
-		UserName:  "testuser",
-		FullName:  "Test User",
-		Email:     "test@chsv.com",
-		AvatarURL: "http://chsv.com/avatar",
-	}
+	client := createTestClient(t)
 
-	mockServer := newMockServer(http.StatusOK, mockUser)
-	defer mockServer.Close()
-
-	client := &Client{
-		url:         mockServer.URL,
-		accessToken: "dummy-token",
-		client:      &http.Client{},
-	}
-
-	user, err := client.GetUser()
+	user, _, err := client.GetMyUserInfo()
 	if err != nil {
-		t.Fatalf("Failed to get user: %v", err)
+		t.Fatalf("Failed to fetch user information: %v", err)
 	}
 
-	if user.UserName != "testuser" {
-		t.Errorf("Expected username to be 'testuser', got '%s'", user.UserName)
+	if user.UserName == "" {
+		t.Fatal("User login is empty")
 	}
-	if user.Email != "test@chsv.com" {
-		t.Errorf("Expected email to be 'test@chsv.com', got '%s'", user.Email)
+
+	if user.Email == "" {
+		t.Fatal("User email is empty")
 	}
+
+	t.Logf("User ID: %d\n", user.ID)
+	t.Logf("Login: %s\n", user.UserName)
+	t.Logf("Full Name: %s\n", user.FullName)
+	t.Logf("Email: %s\n", user.Email)
 }
 
-// TestListMyRepos tests the ListMyRepos method
 func TestListMyRepos(t *testing.T) {
-	mockRepos := []*Repository{
-		{
-			ID:        1,
-			FullName:  "repo1",
-			CloneURL:  "http://chsv.com/repo1.git",
-			Owner:     &User{UserName: "owner1"},
-			Private:   false,
-			HasIssues: true,
-			HasWiki:   true,
-			Created:   time.Now(),
-			Updated:   time.Now(),
-		},
-	}
+	client := createTestClient(t)
 
-	mockServer := newMockServer(http.StatusOK, mockRepos)
-	defer mockServer.Close()
+	repos, _, err := client.ListMyRepos(gitea.ListReposOptions{
+		ListOptions: gitea.ListOptions{
+			Page:     1,
+			PageSize: 10},
+	})
 
-	client := &Client{
-		url:         mockServer.URL,
-		accessToken: "dummy-token",
-		client:      &http.Client{},
-	}
-
-	repos, _, err := client.ListMyRepos(ListReposOptions{ListOptions{Page: 1, PageSize: 10}})
 	if err != nil {
-		t.Fatalf("Failed to list repositories: %v", err)
+		t.Fatalf("Failed to fetch repositories: %v", err)
 	}
 
-	if len(repos) != 1 {
-		t.Fatalf("Expected 1 repository, got %d", len(repos))
-	}
-	if repos[0].FullName != "repo1" {
-		t.Errorf("Expected repo full name to be 'repo1', got '%s'", repos[0].FullName)
+	if len(repos) == 0 {
+		t.Log("No repositories found.")
+	} else {
+		for _, repo := range repos {
+			t.Logf("Repository ID: %d, FullName: %s\n", repo.ID, repo.FullName)
+		}
 	}
 }
 
-// TestListMyOrgs tests the ListMyOrgs method
 func TestListMyOrgs(t *testing.T) {
-	mockOrgs := []*Organization{
-		{
-			ID:          1,
-			UserName:    "chsv1",
-			FullName:    "Organization chsvs",
-			Description: "Organization full of chsvs",
-		},
-	}
+	client := createTestClient(t)
 
-	mockServer := newMockServer(http.StatusOK, mockOrgs)
-	defer mockServer.Close()
+	orgs, _, err := client.ListMyOrgs(gitea.ListOrgsOptions{
+		ListOptions: gitea.ListOptions{
+			Page:     1,
+			PageSize: 10},
+	})
 
-	client := &Client{
-		url:         mockServer.URL,
-		accessToken: "dummy-token",
-		client:      &http.Client{},
-	}
-
-	orgs, _, err := client.ListMyOrgs(ListOrgsOptions{ListOptions{Page: 1, PageSize: 10}})
 	if err != nil {
-		t.Fatalf("Failed to list organizations: %v", err)
+		t.Fatalf("Failed to fetch organizations: %v", err)
 	}
 
-	if len(orgs) != 1 {
-		t.Fatalf("Expected 1 organization, got %d", len(orgs))
+	if len(orgs) == 0 {
+		t.Log("No organizations found.")
+	} else {
+		for _, org := range orgs {
+			t.Logf("Organization ID: %d, Login: %s\n", org.ID, org.UserName)
+		}
 	}
-	if orgs[0].UserName != "chsv1" {
-		t.Errorf("Expected organization username to be 'org1', got '%s'", orgs[0].UserName)
+}
+
+func TestListMyTeams(t *testing.T) {
+	client := createTestClient(t)
+
+	teams, _, err := client.ListMyTeams(&gitea.ListTeamsOptions{
+		ListOptions: gitea.ListOptions{
+			Page:     1,
+			PageSize: 10,
+		},
+	})
+	if err != nil {
+		t.Fatalf("Failed to fetch teams: %v", err)
 	}
+
+	if len(teams) == 0 {
+		t.Log("No teams found.")
+	} else {
+		for _, team := range teams {
+			t.Logf("Team ID: %d, Name: %s, Description: %s, Organization: %s\n", team.ID, team.Name, team.Description, team.Organization.UserName)
+		}
+	}
+}
+
+func TestListMyFollowers(t *testing.T) {
+	client := createTestClient(t)
+
+	followers, _, err := client.ListMyFollowers(gitea.ListFollowersOptions{
+		ListOptions: gitea.ListOptions{
+			Page:     1,
+			PageSize: 10},
+	})
+
+	if err != nil {
+		t.Fatalf("Failed to fetch followers: %v", err)
+	}
+
+	if len(followers) == 0 {
+		t.Log("No followers found.")
+	} else {
+		for _, fol := range followers {
+			t.Logf("Follower ID: %d, Name: %s, Full Name: %s, Email: %s\n", fol.ID, fol.UserName, fol.FullName, fol.Email)
+		}
+	}
+}
+
+func createTestClient(t *testing.T) *gitea.Client {
+	apiToken := os.Getenv("GITEA_TOKEN")
+	if apiToken == "" {
+		t.Fatal("GITEA_TOKEN environment variable is not set")
+	}
+
+	client, err := gitea.NewClient("https://gitcvt.hugpoint.tech", gitea.SetToken(apiToken))
+	if err != nil {
+		t.Fatalf("Error creating Gitea client: %v", err)
+	}
+
+	return client
 }
