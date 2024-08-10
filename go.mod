@@ -4,7 +4,6 @@ go 1.21.5
 
 require (
 	code.gitea.io/sdk/gitea v0.17.1
-	github.com/go-resty/resty/v2 v2.13.1
 	zombiezen.com/go/sqlite v1.1.0
 )
 
