@@ -13,6 +13,9 @@ import (
 	"strings"
 	"zombiezen.com/go/sqlite"
 	"zombiezen.com/go/sqlite/sqlitex"
+	"testing"
+
+	"code.gitea.io/sdk/gitea"
 )
 
 type BugzClient struct {
