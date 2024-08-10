@@ -13,9 +13,6 @@ import (
 	"strings"
 	"zombiezen.com/go/sqlite"
 	"zombiezen.com/go/sqlite/sqlitex"
-	"testing"
-
-	"code.gitea.io/sdk/gitea"
 )
 
 type BugzClient struct {
@@ -459,18 +456,4 @@ func FetchBugsFromDatabase(db *sqlite.Conn) ([]Bug, error) {
 	}
 
 	return bugs, nil
-}
-
-func NewGiteaClient(t *testing.T) *gitea.Client {
-	apiToken := os.Getenv("GITEA_TOKEN")
-	if apiToken == "" {
-		t.Fatal("GITEA_TOKEN environment variable is not set")
-	}
-
-	client, err := gitea.NewClient("https://gitcvt.hugpoint.tech", gitea.SetToken(apiToken))
-	if err != nil {
-		t.Fatalf("Error creating Gitea client: %v", err)
-	}
-
-	return client
 }
