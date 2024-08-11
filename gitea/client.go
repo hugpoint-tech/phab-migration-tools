@@ -1,4 +1,4 @@
-package main
+package gitea
 
 import (
 	"code.gitea.io/sdk/gitea"
@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-func main() {
+func gitea() {
 	URL := "https://gitcvt.hugpoint.tech"
 	token := os.Getenv("GITEA_TOKEN")
 
