@@ -1,14 +1,13 @@
-package gitea
+package gitea_custom
 
 import (
-	"os"
 	"testing"
 
 	"code.gitea.io/sdk/gitea"
 )
 
 func TestGetUser(t *testing.T) {
-	client := createTestClient(t)
+	client, _ := NewGiteaClient()
 
 	user, _, err := client.GetMyUserInfo()
 	if err != nil {
@@ -30,7 +29,7 @@ func TestGetUser(t *testing.T) {
 }
 
 func TestListMyRepos(t *testing.T) {
-	client := createTestClient(t)
+	client, _ := NewGiteaClient()
 
 	repos, _, err := client.ListMyRepos(gitea.ListReposOptions{
 		ListOptions: gitea.ListOptions{
@@ -52,7 +51,7 @@ func TestListMyRepos(t *testing.T) {
 }
 
 func TestListMyOrgs(t *testing.T) {
-	client := createTestClient(t)
+	client, _ := NewGiteaClient()
 
 	orgs, _, err := client.ListMyOrgs(gitea.ListOrgsOptions{
 		ListOptions: gitea.ListOptions{
@@ -74,7 +73,7 @@ func TestListMyOrgs(t *testing.T) {
 }
 
 func TestListMyTeams(t *testing.T) {
-	client := createTestClient(t)
+	client, _ := NewGiteaClient()
 
 	teams, _, err := client.ListMyTeams(&gitea.ListTeamsOptions{
 		ListOptions: gitea.ListOptions{
@@ -96,7 +95,7 @@ func TestListMyTeams(t *testing.T) {
 }
 
 func TestListMyFollowers(t *testing.T) {
-	client := createTestClient(t)
+	client, _ := NewGiteaClient()
 
 	followers, _, err := client.ListMyFollowers(gitea.ListFollowersOptions{
 		ListOptions: gitea.ListOptions{
@@ -115,18 +114,4 @@ func TestListMyFollowers(t *testing.T) {
 			t.Logf("Follower ID: %d, Name: %s, Full Name: %s, Email: %s\n", fol.ID, fol.UserName, fol.FullName, fol.Email)
 		}
 	}
-}
-
-func createTestClient(t *testing.T) *gitea.Client {
-	apiToken := os.Getenv("GITEA_TOKEN")
-	if apiToken == "" {
-		t.Fatal("GITEA_TOKEN environment variable is not set")
-	}
-
-	client, err := gitea.NewClient("https://gitcvt.hugpoint.tech", gitea.SetToken(apiToken))
-	if err != nil {
-		t.Fatalf("Error creating Gitea client: %v", err)
-	}
-
-	return client
 }

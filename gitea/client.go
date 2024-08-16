@@ -1,118 +1,78 @@
-package gitea
+package gitea_custom
 
 import (
 	"code.gitea.io/sdk/gitea"
+	"encoding/json"
 	"fmt"
+	. "hugpoint.tech/freebsd/forge/bugz"
 	"log"
 	"os"
-	"testing"
+	"zombiezen.com/go/sqlite"
 )
 
-func gitea() {
-	URL := "https://gitcvt.hugpoint.tech"
-	token := os.Getenv("GITEA_TOKEN")
+func GiteaGetBugz(databasePath string) error {
 
-	// Create new Gitea client
-	client, err := gitea.NewClient(URL, gitea.SetToken(token))
+	conn, err := sqlite.OpenConn("bugsNew.db", sqlite.OpenReadOnly)
+	if err != nil {
+		log.Fatalf("Failed to open database: %v", err)
+	}
+	defer conn.Close()
+
+	stmt, err := conn.Prepare("SELECT OtherFieldsJSON FROM bugs")
+	if err != nil {
+		log.Fatalf("Failed to prepare statement: %v", err)
+	}
+	defer stmt.Finalize()
+
+	// Initialize Gitea client
+	client, err := NewGiteaClient()
 	if err != nil {
 		log.Fatalf("Failed to create Gitea client: %v", err)
 	}
 
-	// Fetch user information
-	user, _, err := client.GetMyUserInfo()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error fetching user: %v\n", err)
-		os.Exit(1)
-	}
+	repoOwner := "xeonid"
+	repoName := "testBugz"
 
-	fmt.Printf("User: %s\n", user.UserName)
-	fmt.Printf("Full Name: %s\n", user.FullName)
-	fmt.Printf("Email: %s\n", user.Email)
+	for {
+		hasRow, err := stmt.Step()
+		if err != nil {
+			log.Fatalf("Failed to step through rows: %v", err)
+		}
+		if !hasRow {
+			break
+		}
 
-	// List repositories
-	repos, _, err := client.ListMyRepos(gitea.ListReposOptions{
-		ListOptions: gitea.ListOptions{
-			Page:     1,
-			PageSize: 10},
-	})
+		OtherFieldsJSON := stmt.ColumnText(0)
 
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error listing repos: %v\n", err)
-	}
+		var bug Bug
+		if err := json.Unmarshal([]byte(OtherFieldsJSON), &bug); err != nil {
+			log.Printf("Failed to parse JSON: %v", err)
+			continue
+		}
 
-	if len(repos) == 0 {
-		fmt.Println("No repositories found.")
-	} else {
-		for _, repo := range repos {
-			fmt.Printf("Repo: %s\n", repo.FullName)
+		issue, _, err := client.CreateIssue(repoOwner, repoName, gitea.CreateIssueOption{
+			Title: bug.Summary,
+			Body:  fmt.Sprintf("Details:\n%s", OtherFieldsJSON),
+		})
+		if err != nil {
+			log.Printf("Failed to create issue: %v\n", err)
+		} else {
+			fmt.Printf("Issue created: %s\n", issue.URL)
 		}
 	}
-
-	// List organizations
-	orgs, _, err := client.ListMyOrgs(gitea.ListOrgsOptions{
-		ListOptions: gitea.ListOptions{
-			Page:     1,
-			PageSize: 10},
-	})
-
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error listing orgs: %v\n", err)
-	}
-
-	if len(orgs) == 0 {
-		fmt.Println("No organizations found.")
-	} else {
-		for _, org := range orgs {
-			fmt.Printf("Org: %s\n", org.UserName)
-		}
-	}
-
-	// List teams that the authenticated user is a member of
-	teams, _, err := client.ListMyTeams(&gitea.ListTeamsOptions{
-		ListOptions: gitea.ListOptions{
-			Page:     1,
-			PageSize: 10,
-		},
-	})
-
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error fetching teams: %v\n", err)
-	}
-
-	if len(teams) == 0 {
-		fmt.Println("No teams found.")
-	} else {
-		for _, team := range teams {
-			fmt.Printf("Team ID: %d, Name: %s, Description: %s, Organization: %s\n",
-				team.ID, team.Name, team.Description, team.Organization.UserName)
-		}
-	}
-
-	// List followers
-	followers, _, err := client.ListMyFollowers(gitea.ListFollowersOptions{})
-	if err != nil {
-		log.Fatalf("Failed to list followers: %v", err)
-	}
-
-	if len(orgs) == 0 {
-		fmt.Println("No followers found.")
-	} else {
-		for _, follower := range followers {
-			fmt.Printf("Follower: %s\n", follower.UserName)
-		}
-	}
+	return nil
 }
 
-func NewGiteaClient(t *testing.T) *gitea.Client {
+func NewGiteaClient() (*gitea.Client, error) {
 	apiToken := os.Getenv("GITEA_TOKEN")
 	if apiToken == "" {
-		t.Fatal("GITEA_TOKEN environment variable is not set")
+		fmt.Errorf("GITEA_TOKEN environment variable is not set")
 	}
 
 	client, err := gitea.NewClient("https://gitcvt.hugpoint.tech", gitea.SetToken(apiToken))
 	if err != nil {
-		t.Fatalf("Error creating Gitea client: %v", err)
+		fmt.Errorf("Error creating Gitea client: %v", err)
 	}
 
-	return client
+	return client, nil
 }
