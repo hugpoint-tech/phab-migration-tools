@@ -12,7 +12,7 @@ import (
 
 func GiteaGetBugz(databasePath string) error {
 
-	conn, err := sqlite.OpenConn("bugsNew.db", sqlite.OpenReadOnly)
+	conn, err := sqlite.OpenConn(databasePath, sqlite.OpenReadOnly)
 	if err != nil {
 		log.Fatalf("Failed to open database: %v", err)
 	}
