@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	. "hugpoint.tech/freebsd/forge/bugz"
+	giteacustom "hugpoint.tech/freebsd/forge/gitea"
 	"log"
 	"os"
 )
@@ -14,8 +15,8 @@ func main() {
 	}
 	command := os.Args[1]
 
-	databasePath := "bugsNew.db"           // Specify the path to the database
-	bc, err := NewBugzClient(databasePath) // Create a BugzClient instance
+	bugzDatabasePath := "bugsNew.db"           // Specify the path to the database
+	bc, err := NewBugzClient(bugzDatabasePath) // Create a BugzClient instance
 	if err != nil {
 		log.Fatalf("Failed to create BugzClient: %v", err)
 	}
@@ -70,6 +71,12 @@ func main() {
 			}
 		}
 		fmt.Println("Downloaded attachments for all bugs successfully.")
+	case "gitea-upload-bugs":
+		err := giteacustom.GiteaGetBugz(bugzDatabasePath)
+		if err != nil {
+			fmt.Printf("Error uploading bugs to gitea: %v\n", err)
+		}
+
 	default:
 		fmt.Println("invalid command")
 		printHelp()
@@ -84,6 +91,7 @@ func printHelp() { // not sure about functions descriptions
 		"bugzilla-download-users - downloads users from bugzilla\n" +
 		"bugzilla-download-comments - downloads comments from bugs db\n" +
 		"bugzilla-download-attachments - downloads attachments from bugs db\n" +
+		"gitea-upload-bugs - upload bugs to gitea from local bugzilla db\n" +
 		"help - shows available commands")
 
 }
