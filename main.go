@@ -72,7 +72,7 @@ func main() {
 		}
 		fmt.Println("Downloaded attachments for all bugs successfully.")
 	case "gitea-upload-bugs":
-		err := giteacustom.GiteaGetBugz(bugzDatabasePath)
+		err := giteacustom.GiteaGetBugz(bc)
 		if err != nil {
 			fmt.Printf("Error uploading bugs to gitea: %v\n", err)
 		}
