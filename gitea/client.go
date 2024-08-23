@@ -7,18 +7,20 @@ import (
 	. "hugpoint.tech/freebsd/forge/bugz"
 	"log"
 	"os"
-	"zombiezen.com/go/sqlite"
 )
 
-func GiteaGetBugz(databasePath string) error {
+func GiteaGetBugz(bc *BugzClient) error {
 
-	conn, err := sqlite.OpenConn(databasePath, sqlite.OpenReadOnly)
-	if err != nil {
-		log.Fatalf("Failed to open database: %v", err)
+	// Set environment variables for repo
+	repoOwner := os.Getenv("REPO_OWNER")
+	repoName := os.Getenv("REPO_NAME")
+
+	if repoOwner == "" || repoName == "" {
+		fmt.Println("REPO_OWNER and REPO_NAME environment variables must be set")
+		return nil
 	}
-	defer conn.Close()
 
-	stmt, err := conn.Prepare("SELECT OtherFieldsJSON FROM bugs")
+	stmt, err := bc.Db.Prepare("SELECT OtherFieldsJSON FROM bugs")
 	if err != nil {
 		log.Fatalf("Failed to prepare statement: %v", err)
 	}
@@ -29,9 +31,6 @@ func GiteaGetBugz(databasePath string) error {
 	if err != nil {
 		log.Fatalf("Failed to create Gitea client: %v", err)
 	}
-
-	repoOwner := "xeonid"
-	repoName := "testBugz"
 
 	for {
 		hasRow, err := stmt.Step()
@@ -60,6 +59,7 @@ func GiteaGetBugz(databasePath string) error {
 			fmt.Printf("Issue created: %s\n", issue.URL)
 		}
 	}
+
 	return nil
 }
 
