@@ -7,20 +7,17 @@ import (
 	. "hugpoint.tech/freebsd/forge/bugz"
 	"log"
 	"os"
+	"zombiezen.com/go/sqlite"
 )
 
 func GiteaGetBugz(bc *BugzClient) error {
 
-	// Set environment variables for repo
-	repoOwner := os.Getenv("REPO_OWNER")
-	repoName := os.Getenv("REPO_NAME")
-
-	if repoOwner == "" || repoName == "" {
-		fmt.Println("REPO_OWNER and REPO_NAME environment variables must be set")
-		return nil
+	repoOwner, repoName, err := getRepoDetails()
+	if err != nil {
+		fmt.Println(err)
 	}
 
-	stmt, err := bc.Db.Prepare("SELECT OtherFieldsJSON FROM bugs")
+	stmt, err := prepareStmt(bc)
 	if err != nil {
 		log.Fatalf("Failed to prepare statement: %v", err)
 	}
@@ -32,32 +29,11 @@ func GiteaGetBugz(bc *BugzClient) error {
 		log.Fatalf("Failed to create Gitea client: %v", err)
 	}
 
-	for {
-		hasRow, err := stmt.Step()
-		if err != nil {
-			log.Fatalf("Failed to step through rows: %v", err)
-		}
-		if !hasRow {
-			break
-		}
-
-		OtherFieldsJSON := stmt.ColumnText(0)
-
-		var bug Bug
-		if err := json.Unmarshal([]byte(OtherFieldsJSON), &bug); err != nil {
-			log.Printf("Failed to parse JSON: %v", err)
-			continue
-		}
-
-		issue, _, err := client.CreateIssue(repoOwner, repoName, gitea.CreateIssueOption{
-			Title: bug.Summary,
-			Body:  fmt.Sprintf("Details:\n%s", OtherFieldsJSON),
-		})
-		if err != nil {
-			log.Printf("Failed to create issue: %v\n", err)
-		} else {
-			fmt.Printf("Issue created: %s\n", issue.URL)
-		}
+	err = processBugRows(stmt, func(bug Bug, rawJSON string) error {
+		return createGiteaIssue(client, repoOwner, repoName, bug, rawJSON)
+	})
+	if err != nil {
+		return fmt.Errorf("error processing bug rows: %w", err)
 	}
 
 	return nil
@@ -75,4 +51,60 @@ func NewGiteaClient() (*gitea.Client, error) {
 	}
 
 	return client, nil
+}
+
+func getRepoDetails() (string, string, error) {
+	repoOwner := os.Getenv("REPO_OWNER")
+	repoName := os.Getenv("REPO_NAME")
+
+	if repoOwner == "" || repoName == "" {
+		return "", "", fmt.Errorf("REPO_OWNER and REPO_NAME environment variables must be set")
+	}
+	return repoOwner, repoName, nil
+}
+
+func prepareStmt(bc *BugzClient) (*sqlite.Stmt, error) {
+	stmt, err := bc.Db.Prepare("SELECT OtherFieldsJSON FROM bugs")
+	if err != nil {
+		return nil, fmt.Errorf("failed to prepare statement: %w", err)
+	}
+	return stmt, nil
+}
+
+func createGiteaIssue(client *gitea.Client, repoOwner, repoName string, bug Bug, rawJSON string) error {
+	issue, _, err := client.CreateIssue(repoOwner, repoName, gitea.CreateIssueOption{
+		Title: bug.Summary,
+		Body:  fmt.Sprintf("Details:\n%s", rawJSON),
+	})
+	if err != nil {
+		return fmt.Errorf("failed to create issue: %w", err)
+	}
+	fmt.Printf("Issue created: %s\n", issue.URL)
+	return nil
+}
+
+func processBugRows(stmt *sqlite.Stmt, processFunc func(bug Bug, rawJSON string) error) error {
+	for {
+		hasRow, err := stmt.Step()
+		if err != nil {
+			return fmt.Errorf("failed to step through rows: %w", err)
+		}
+		if !hasRow {
+			break
+		}
+
+		OtherFieldsJSON := stmt.ColumnText(0)
+
+		var bug Bug
+		if err := json.Unmarshal([]byte(OtherFieldsJSON), &bug); err != nil {
+			log.Printf("Failed to parse JSON: %v", err)
+			continue
+		}
+
+		if err := processFunc(bug, OtherFieldsJSON); err != nil {
+			log.Printf("Failed to process bug: %v", err)
+			continue
+		}
+	}
+	return nil
 }
