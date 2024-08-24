@@ -72,9 +72,14 @@ func prepareStmt(bc *BugzClient) (*sqlite.Stmt, error) {
 }
 
 func createGiteaIssue(client *gitea.Client, repoOwner, repoName string, bug Bug, rawJSON string) error {
+	issueBody := fmt.Sprintf(
+		"ID: %d\n\nCreation Time: %s\n\nCreator: %s\n\nDetails:\n%s\n",
+		bug.ID, bug.CreationTime, bug.Creator, rawJSON,
+	)
+
 	issue, _, err := client.CreateIssue(repoOwner, repoName, gitea.CreateIssueOption{
 		Title: bug.Summary,
-		Body:  fmt.Sprintf("Details:\n%s", rawJSON),
+		Body:  issueBody,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to create issue: %w", err)
