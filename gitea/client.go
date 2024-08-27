@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	. "hugpoint.tech/freebsd/forge/bugz"
-	"log"
 	"os"
 	"zombiezen.com/go/sqlite"
 )
@@ -14,19 +13,19 @@ func GiteaGetBugz(bc *BugzClient) error {
 
 	repoOwner, repoName, err := getRepoDetails()
 	if err != nil {
-		fmt.Println(err)
+		return fmt.Errorf("failed to get repository details: %w", err)
 	}
 
 	stmt, err := prepareStmt(bc)
 	if err != nil {
-		log.Fatalf("Failed to prepare statement: %v", err)
+		return fmt.Errorf("failed to prepare statement: %v", err)
 	}
 	defer stmt.Finalize()
 
 	// Initialize Gitea client
 	client, err := NewGiteaClient()
 	if err != nil {
-		log.Fatalf("Failed to create Gitea client: %v", err)
+		return fmt.Errorf("failed to create Gitea client: %v", err)
 	}
 
 	err = processBugRows(stmt, func(bug Bug, rawJSON string) error {
@@ -42,12 +41,12 @@ func GiteaGetBugz(bc *BugzClient) error {
 func NewGiteaClient() (*gitea.Client, error) {
 	apiToken := os.Getenv("GITEA_TOKEN")
 	if apiToken == "" {
-		fmt.Errorf("GITEA_TOKEN environment variable is not set")
+		return nil, fmt.Errorf("GITEA_TOKEN environment variable is not set")
 	}
 
 	client, err := gitea.NewClient("https://gitcvt.hugpoint.tech", gitea.SetToken(apiToken))
 	if err != nil {
-		fmt.Errorf("Error creating Gitea client: %v", err)
+		return nil, fmt.Errorf("error creating Gitea client: %v", err)
 	}
 
 	return client, nil
@@ -102,12 +101,12 @@ func processBugRows(stmt *sqlite.Stmt, processFunc func(bug Bug, rawJSON string)
 
 		var bug Bug
 		if err := json.Unmarshal([]byte(OtherFieldsJSON), &bug); err != nil {
-			log.Printf("Failed to parse JSON: %v", err)
+			fmt.Printf("Failed to parse JSON for row %d: %v\nData: %s", stmt.ColumnInt(0), err, OtherFieldsJSON)
 			continue
 		}
 
 		if err := processFunc(bug, OtherFieldsJSON); err != nil {
-			log.Printf("Failed to process bug: %v", err)
+			fmt.Printf("Failed to process bug ID %d: %v\nData: %s", bug.ID, err, OtherFieldsJSON)
 			continue
 		}
 	}
