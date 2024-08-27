@@ -25,23 +25,23 @@ func main() {
 	case "bugzilla-download-bugs":
 		err := bc.DownloadBugzillaBugs()
 		if err != nil {
-			fmt.Printf("Error downloading bugs: %v\n", err)
+			log.Fatalf("Error downloading bugs: %v\n", err)
 		}
 	case "help":
 		printHelp()
 	case "bugzilla-list-bugs":
 		err := bc.ListBugs()
 		if err != nil {
-			fmt.Printf("Error listing bugs: %v\n", err)
+			log.Fatalf("Error listing bugs: %v\n", err)
 		}
 	case "bugzilla-download-users":
 		err := bc.DownloadBugzillaUsers()
 		if err != nil {
-			fmt.Printf("Error downloading users: %v\n", err)
+			log.Fatalf("Error downloading users: %v\n", err)
 		}
 	case "bugzilla-show-bugs":
 		if err := bc.ShowBugs(); err != nil {
-			fmt.Printf("error showing bugs: %v\n", err)
+			log.Fatalf("error showing bugs: %v\n", err)
 		}
 	case "bugzilla-download-comments":
 		// Fetch bugs from the SQLite database
@@ -53,7 +53,7 @@ func main() {
 		for _, bug := range bugs {
 			err := bc.DownloadBugzillaComments(int64(bug.ID))
 			if err != nil {
-				log.Printf("Error downloading comments for bug %d: %v", bug.ID, err)
+				fmt.Printf("Error downloading comments for bug %d: %v", bug.ID, err)
 			}
 		}
 		fmt.Println("Downloaded comments for all bugs successfully.")
@@ -67,14 +67,14 @@ func main() {
 		for _, bug := range bugs {
 			err := bc.DownloadBugzillaAttachments(int64(bug.ID))
 			if err != nil {
-				log.Printf("Error downloading attachments for bug %d: %v", bug.ID, err)
+				fmt.Printf("Error downloading attachments for bug %d: %v", bug.ID, err)
 			}
 		}
 		fmt.Println("Downloaded attachments for all bugs successfully.")
 	case "gitea-upload-bugs":
 		err := giteacustom.GiteaGetBugz(bc)
 		if err != nil {
-			fmt.Printf("Error uploading bugs to gitea: %v\n", err)
+			log.Fatalf("Error uploading bugs to gitea: %v\n", err)
 		}
 
 	default:
