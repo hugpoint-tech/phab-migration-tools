@@ -11,7 +11,7 @@ import (
 )
 
 type Gitea struct {
-	*gitea.Client
+	client *gitea.Client
 
 	RepoName  string
 	RepoOwner string
@@ -30,7 +30,7 @@ func New() Gitea {
 	util.CheckFatal("failed to get repository details", err)
 
 	return Gitea{
-		Client:    client,
+		client:    client,
 		RepoName:  repoName,
 		RepoOwner: repoOwner,
 	}
@@ -70,7 +70,7 @@ func (g *Gitea) createGiteaIssue(bug Bug, rawJSON string) error {
 		bug.ID, bug.CreationTime, bug.Creator, rawJSON,
 	)
 
-	issue, _, err := g.CreateIssue(g.RepoOwner, g.RepoName, gitea.CreateIssueOption{
+	issue, _, err := g.client.CreateIssue(g.RepoOwner, g.RepoName, gitea.CreateIssueOption{
 		Title: bug.Summary,
 		Body:  issueBody,
 	})
