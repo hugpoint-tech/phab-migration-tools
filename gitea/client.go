@@ -23,9 +23,7 @@ func (g *Gitea) UploadBugs(bc *BugzClient) {
 	util.CheckFatal("failed to prepare statement", err)
 	defer stmt.Finalize()
 
-	err = processBugRows(stmt, func(bug Bug, rawJSON string) error {
-		return g.createGiteaIssue(bug, rawJSON)
-	})
+	err = g.processBugRows(stmt)
 	util.CheckFatal("error processing bug rows", err)
 }
 
@@ -83,7 +81,7 @@ func (g *Gitea) createGiteaIssue(bug Bug, rawJSON string) error {
 	return nil
 }
 
-func processBugRows(stmt *sqlite.Stmt, processFunc func(bug Bug, rawJSON string) error) error {
+func (g *Gitea) processBugRows(stmt *sqlite.Stmt) error {
 	for {
 		hasRow, err := stmt.Step()
 		if err != nil {
@@ -101,7 +99,7 @@ func processBugRows(stmt *sqlite.Stmt, processFunc func(bug Bug, rawJSON string)
 			continue
 		}
 
-		if err := processFunc(bug, OtherFieldsJSON); err != nil {
+		if err := g.createGiteaIssue(bug, OtherFieldsJSON); err != nil {
 			fmt.Printf("Failed to process bug ID %d: %v\nData: %s", bug.ID, err, OtherFieldsJSON)
 			continue
 		}
