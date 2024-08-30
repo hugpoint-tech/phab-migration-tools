@@ -72,7 +72,16 @@ func main() {
 		}
 		fmt.Println("Downloaded attachments for all bugs successfully.")
 	case "gitea-upload-bugs":
-		giteaClient := giteacustom.New()
+
+		var url string
+		if len(os.Args) < 3 {
+			url = giteacustom.DEFAULT_GITEA_URL
+			fmt.Println("using default gitea url", url)
+		} else {
+			url = os.Args[2]
+		}
+
+		giteaClient := giteacustom.New(url)
 		giteaClient.UploadBugs(bc)
 
 	default:
@@ -89,7 +98,7 @@ func printHelp() { // not sure about functions descriptions
 		"bugzilla-download-users - downloads users from bugzilla\n" +
 		"bugzilla-download-comments - downloads comments from bugs db\n" +
 		"bugzilla-download-attachments - downloads attachments from bugs db\n" +
-		"gitea-upload-bugs - upload bugs to gitea from local bugzilla db\n" +
+		"gitea-upload-bugs [url] - upload bugs to gitea from local bugzilla db\n" +
 		"help - shows available commands")
 
 }
