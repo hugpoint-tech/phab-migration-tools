@@ -14,7 +14,7 @@ type Gitea struct {
 	*gitea.Client
 }
 
-func UploadBugs(bc *BugzClient) error {
+func (g *Gitea) UploadBugs(bc *BugzClient) error {
 
 	repoOwner, repoName, err := getRepoDetails()
 	if err != nil {
@@ -28,10 +28,9 @@ func UploadBugs(bc *BugzClient) error {
 	defer stmt.Finalize()
 
 	// Initialize Gitea client
-	client := New()
 
 	err = processBugRows(stmt, func(bug Bug, rawJSON string) error {
-		return createGiteaIssue(&client, repoOwner, repoName, bug, rawJSON)
+		return g.createGiteaIssue(repoOwner, repoName, bug, rawJSON)
 	})
 	if err != nil {
 		return fmt.Errorf("error processing bug rows: %w", err)
@@ -70,13 +69,13 @@ func prepareStmt(bc *BugzClient) (*sqlite.Stmt, error) {
 	return stmt, nil
 }
 
-func createGiteaIssue(client *Gitea, repoOwner, repoName string, bug Bug, rawJSON string) error {
+func (g *Gitea) createGiteaIssue(repoOwner, repoName string, bug Bug, rawJSON string) error {
 	issueBody := fmt.Sprintf(
 		"ID: %d\n\nCreation Time: %s\n\nCreator: %s\n\nDetails:\n%s\n",
 		bug.ID, bug.CreationTime, bug.Creator, rawJSON,
 	)
 
-	issue, _, err := client.CreateIssue(repoOwner, repoName, gitea.CreateIssueOption{
+	issue, _, err := g.CreateIssue(repoOwner, repoName, gitea.CreateIssueOption{
 		Title: bug.Summary,
 		Body:  issueBody,
 	})
