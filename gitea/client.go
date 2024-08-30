@@ -9,7 +9,7 @@ import (
 	"zombiezen.com/go/sqlite"
 )
 
-func GiteaGetBugz(bc *BugzClient) error {
+func UploadBugs(bc *BugzClient) error {
 
 	repoOwner, repoName, err := getRepoDetails()
 	if err != nil {
