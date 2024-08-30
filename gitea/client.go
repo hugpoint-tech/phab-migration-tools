@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	. "hugpoint.tech/freebsd/forge/bugz"
+	"hugpoint.tech/freebsd/forge/util"
 	"os"
 	"zombiezen.com/go/sqlite"
 )
@@ -23,10 +24,7 @@ func UploadBugs(bc *BugzClient) error {
 	defer stmt.Finalize()
 
 	// Initialize Gitea client
-	client, err := NewGiteaClient()
-	if err != nil {
-		return fmt.Errorf("failed to create Gitea client: %v", err)
-	}
+	client := NewGiteaClient()
 
 	err = processBugRows(stmt, func(bug Bug, rawJSON string) error {
 		return createGiteaIssue(client, repoOwner, repoName, bug, rawJSON)
@@ -38,18 +36,16 @@ func UploadBugs(bc *BugzClient) error {
 	return nil
 }
 
-func NewGiteaClient() (*gitea.Client, error) {
+func NewGiteaClient() *gitea.Client {
 	apiToken := os.Getenv("GITEA_TOKEN")
 	if apiToken == "" {
-		return nil, fmt.Errorf("GITEA_TOKEN environment variable is not set")
+		util.Fatal("GITEA_TOKEN environment variable is not set")
 	}
 
 	client, err := gitea.NewClient("https://gitcvt.hugpoint.tech", gitea.SetToken(apiToken))
-	if err != nil {
-		return nil, fmt.Errorf("error creating Gitea client: %v", err)
-	}
+	util.CheckFatal("error creating Gitea client", err)
 
-	return client, nil
+	return client
 }
 
 func getRepoDetails() (string, string, error) {
