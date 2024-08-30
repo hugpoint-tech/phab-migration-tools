@@ -10,6 +10,10 @@ import (
 	"zombiezen.com/go/sqlite"
 )
 
+const (
+	ENV_GITEA_TOKEN = "GITEA_TOKEN"
+)
+
 type Gitea struct {
 	client *gitea.Client
 
@@ -18,9 +22,9 @@ type Gitea struct {
 }
 
 func New() Gitea {
-	apiToken := os.Getenv("GITEA_TOKEN")
+	apiToken := os.Getenv(ENV_GITEA_TOKEN)
 	if apiToken == "" {
-		util.Fatal("GITEA_TOKEN environment variable is not set")
+		util.Fatalf("%s environment variable is not set", ENV_GITEA_TOKEN)
 	}
 
 	client, err := gitea.NewClient("https://gitcvt.hugpoint.tech", gitea.SetToken(apiToken))
