@@ -12,6 +12,8 @@ import (
 
 const (
 	ENV_GITEA_TOKEN = "GITEA_TOKEN"
+	ENV_REPO_NAME   = "REPO_NAME"
+	ENV_REPO_OWNER  = "REPO_OWNER"
 )
 
 type Gitea struct {
@@ -30,11 +32,11 @@ func New() Gitea {
 	client, err := gitea.NewClient("https://gitcvt.hugpoint.tech", gitea.SetToken(apiToken))
 	util.CheckFatal("error creating Gitea client", err)
 
-	repoOwner := os.Getenv("REPO_OWNER")
-	repoName := os.Getenv("REPO_NAME")
+	repoOwner := os.Getenv(ENV_REPO_OWNER)
+	repoName := os.Getenv(ENV_REPO_NAME)
 
 	if repoOwner == "" || repoName == "" {
-		util.Fatal("REPO_OWNER and REPO_NAME environment variables must be set")
+		util.Fatalf("%s and %s environment variables must be set", ENV_REPO_OWNER, ENV_REPO_NAME)
 	}
 
 	return Gitea{
