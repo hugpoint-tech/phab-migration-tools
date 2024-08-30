@@ -26,8 +26,12 @@ func New() Gitea {
 	client, err := gitea.NewClient("https://gitcvt.hugpoint.tech", gitea.SetToken(apiToken))
 	util.CheckFatal("error creating Gitea client", err)
 
-	repoOwner, repoName, err := getRepoDetails()
-	util.CheckFatal("failed to get repository details", err)
+	repoOwner := os.Getenv("REPO_OWNER")
+	repoName := os.Getenv("REPO_NAME")
+
+	if repoOwner == "" || repoName == "" {
+		util.Fatal("REPO_OWNER and REPO_NAME environment variables must be set")
+	}
 
 	return Gitea{
 		client:    client,
@@ -44,16 +48,6 @@ func (g *Gitea) UploadBugs(bc *BugzClient) {
 
 	err = g.processBugRows(stmt)
 	util.CheckFatal("error processing bug rows", err)
-}
-
-func getRepoDetails() (string, string, error) {
-	repoOwner := os.Getenv("REPO_OWNER")
-	repoName := os.Getenv("REPO_NAME")
-
-	if repoOwner == "" || repoName == "" {
-		return "", "", fmt.Errorf("REPO_OWNER and REPO_NAME environment variables must be set")
-	}
-	return repoOwner, repoName, nil
 }
 
 func prepareStmt(bc *BugzClient) (*sqlite.Stmt, error) {
