@@ -14,29 +14,19 @@ type Gitea struct {
 	*gitea.Client
 }
 
-func (g *Gitea) UploadBugs(bc *BugzClient) error {
+func (g *Gitea) UploadBugs(bc *BugzClient) {
 
 	repoOwner, repoName, err := getRepoDetails()
-	if err != nil {
-		return fmt.Errorf("failed to get repository details: %w", err)
-	}
+	util.CheckFatal("failed to get repository details", err)
 
 	stmt, err := prepareStmt(bc)
-	if err != nil {
-		return fmt.Errorf("failed to prepare statement: %v", err)
-	}
+	util.CheckFatal("failed to prepare statement", err)
 	defer stmt.Finalize()
-
-	// Initialize Gitea client
 
 	err = processBugRows(stmt, func(bug Bug, rawJSON string) error {
 		return g.createGiteaIssue(repoOwner, repoName, bug, rawJSON)
 	})
-	if err != nil {
-		return fmt.Errorf("error processing bug rows: %w", err)
-	}
-
-	return nil
+	util.CheckFatal("error processing bug rows", err)
 }
 
 func New() Gitea {
