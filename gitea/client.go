@@ -28,7 +28,7 @@ func UploadBugs(bc *BugzClient) error {
 	defer stmt.Finalize()
 
 	// Initialize Gitea client
-	client := NewGiteaClient()
+	client := New()
 
 	err = processBugRows(stmt, func(bug Bug, rawJSON string) error {
 		return createGiteaIssue(&client, repoOwner, repoName, bug, rawJSON)
@@ -40,7 +40,7 @@ func UploadBugs(bc *BugzClient) error {
 	return nil
 }
 
-func NewGiteaClient() Gitea {
+func New() Gitea {
 	apiToken := os.Getenv("GITEA_TOKEN")
 	if apiToken == "" {
 		util.Fatal("GITEA_TOKEN environment variable is not set")

@@ -7,7 +7,7 @@ import (
 )
 
 func TestGetUser(t *testing.T) {
-	client, _ := NewGiteaClient()
+	client, _ := New()
 
 	user, _, err := client.GetMyUserInfo()
 	if err != nil {
@@ -29,7 +29,7 @@ func TestGetUser(t *testing.T) {
 }
 
 func TestListMyRepos(t *testing.T) {
-	client, _ := NewGiteaClient()
+	client, _ := New()
 
 	repos, _, err := client.ListMyRepos(gitea.ListReposOptions{
 		ListOptions: gitea.ListOptions{
@@ -51,7 +51,7 @@ func TestListMyRepos(t *testing.T) {
 }
 
 func TestListMyOrgs(t *testing.T) {
-	client, _ := NewGiteaClient()
+	client, _ := New()
 
 	orgs, _, err := client.ListMyOrgs(gitea.ListOrgsOptions{
 		ListOptions: gitea.ListOptions{
@@ -73,7 +73,7 @@ func TestListMyOrgs(t *testing.T) {
 }
 
 func TestListMyTeams(t *testing.T) {
-	client, _ := NewGiteaClient()
+	client, _ := New()
 
 	teams, _, err := client.ListMyTeams(&gitea.ListTeamsOptions{
 		ListOptions: gitea.ListOptions{
@@ -95,7 +95,7 @@ func TestListMyTeams(t *testing.T) {
 }
 
 func TestListMyFollowers(t *testing.T) {
-	client, _ := NewGiteaClient()
+	client, _ := New()
 
 	followers, _, err := client.ListMyFollowers(gitea.ListFollowersOptions{
 		ListOptions: gitea.ListOptions{
