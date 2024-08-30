@@ -10,6 +10,10 @@ import (
 	"zombiezen.com/go/sqlite"
 )
 
+type Gitea struct {
+	*gitea.Client
+}
+
 func UploadBugs(bc *BugzClient) error {
 
 	repoOwner, repoName, err := getRepoDetails()
@@ -27,7 +31,7 @@ func UploadBugs(bc *BugzClient) error {
 	client := NewGiteaClient()
 
 	err = processBugRows(stmt, func(bug Bug, rawJSON string) error {
-		return createGiteaIssue(client, repoOwner, repoName, bug, rawJSON)
+		return createGiteaIssue(&client, repoOwner, repoName, bug, rawJSON)
 	})
 	if err != nil {
 		return fmt.Errorf("error processing bug rows: %w", err)
@@ -36,7 +40,7 @@ func UploadBugs(bc *BugzClient) error {
 	return nil
 }
 
-func NewGiteaClient() *gitea.Client {
+func NewGiteaClient() Gitea {
 	apiToken := os.Getenv("GITEA_TOKEN")
 	if apiToken == "" {
 		util.Fatal("GITEA_TOKEN environment variable is not set")
@@ -45,7 +49,7 @@ func NewGiteaClient() *gitea.Client {
 	client, err := gitea.NewClient("https://gitcvt.hugpoint.tech", gitea.SetToken(apiToken))
 	util.CheckFatal("error creating Gitea client", err)
 
-	return client
+	return Gitea{Client: client}
 }
 
 func getRepoDetails() (string, string, error) {
@@ -66,7 +70,7 @@ func prepareStmt(bc *BugzClient) (*sqlite.Stmt, error) {
 	return stmt, nil
 }
 
-func createGiteaIssue(client *gitea.Client, repoOwner, repoName string, bug Bug, rawJSON string) error {
+func createGiteaIssue(client *Gitea, repoOwner, repoName string, bug Bug, rawJSON string) error {
 	issueBody := fmt.Sprintf(
 		"ID: %d\n\nCreation Time: %s\n\nCreator: %s\n\nDetails:\n%s\n",
 		bug.ID, bug.CreationTime, bug.Creator, rawJSON,
