@@ -7,9 +7,9 @@ import (
 )
 
 func TestGetUser(t *testing.T) {
-	client, _ := New()
+	giteaClient := New(DEFAULT_GITEA_URL)
 
-	user, _, err := client.GetMyUserInfo()
+	user, _, err := giteaClient.client.GetMyUserInfo()
 	if err != nil {
 		t.Fatalf("Failed to fetch user information: %v", err)
 	}
@@ -29,9 +29,9 @@ func TestGetUser(t *testing.T) {
 }
 
 func TestListMyRepos(t *testing.T) {
-	client, _ := New()
+	giteaClient := New(DEFAULT_GITEA_URL)
 
-	repos, _, err := client.ListMyRepos(gitea.ListReposOptions{
+	repos, _, err := giteaClient.client.ListMyRepos(gitea.ListReposOptions{
 		ListOptions: gitea.ListOptions{
 			Page:     1,
 			PageSize: 10},
@@ -51,9 +51,9 @@ func TestListMyRepos(t *testing.T) {
 }
 
 func TestListMyOrgs(t *testing.T) {
-	client, _ := New()
+	giteaClient := New(DEFAULT_GITEA_URL)
 
-	orgs, _, err := client.ListMyOrgs(gitea.ListOrgsOptions{
+	orgs, _, err := giteaClient.client.ListMyOrgs(gitea.ListOrgsOptions{
 		ListOptions: gitea.ListOptions{
 			Page:     1,
 			PageSize: 10},
@@ -73,9 +73,9 @@ func TestListMyOrgs(t *testing.T) {
 }
 
 func TestListMyTeams(t *testing.T) {
-	client, _ := New()
+	giteaClient := New(DEFAULT_GITEA_URL)
 
-	teams, _, err := client.ListMyTeams(&gitea.ListTeamsOptions{
+	teams, _, err := giteaClient.client.ListMyTeams(&gitea.ListTeamsOptions{
 		ListOptions: gitea.ListOptions{
 			Page:     1,
 			PageSize: 10,
@@ -95,9 +95,9 @@ func TestListMyTeams(t *testing.T) {
 }
 
 func TestListMyFollowers(t *testing.T) {
-	client, _ := New()
+	giteaClient := New(DEFAULT_GITEA_URL)
 
-	followers, _, err := client.ListMyFollowers(gitea.ListFollowersOptions{
+	followers, _, err := giteaClient.client.ListMyFollowers(gitea.ListFollowersOptions{
 		ListOptions: gitea.ListOptions{
 			Page:     1,
 			PageSize: 10},
