@@ -17,16 +17,6 @@ type Gitea struct {
 	RepoOwner string
 }
 
-func (g *Gitea) UploadBugs(bc *BugzClient) {
-
-	stmt, err := prepareStmt(bc)
-	util.CheckFatal("failed to prepare statement", err)
-	defer stmt.Finalize()
-
-	err = g.processBugRows(stmt)
-	util.CheckFatal("error processing bug rows", err)
-}
-
 func New() Gitea {
 	apiToken := os.Getenv("GITEA_TOKEN")
 	if apiToken == "" {
@@ -44,6 +34,16 @@ func New() Gitea {
 		RepoName:  repoName,
 		RepoOwner: repoOwner,
 	}
+}
+
+func (g *Gitea) UploadBugs(bc *BugzClient) {
+
+	stmt, err := prepareStmt(bc)
+	util.CheckFatal("failed to prepare statement", err)
+	defer stmt.Finalize()
+
+	err = g.processBugRows(stmt)
+	util.CheckFatal("error processing bug rows", err)
 }
 
 func getRepoDetails() (string, string, error) {
