@@ -109,3 +109,8 @@ type CommentsResponse struct {
 type AttachmentsResponse struct {
 	Bugs map[int][]Attachment `json:"bugs"`
 }
+
+type CommentTask struct {
+	BugID    int64
+	Comments []Comment
+}

@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"zombiezen.com/go/sqlite"
 	"zombiezen.com/go/sqlite/sqlitex"
 )
@@ -345,7 +346,31 @@ func GetDistinctUsers(db *sqlite.Conn) ([]User, error) {
 	return users, nil
 }
 
-func (bc *BugzClient) DownloadBugzillaComments(bugID int64) error {
+func (bc *BugzClient) DownloadBugzillaComments(bugIDs []int64) error {
+	var wg sync.WaitGroup
+	taskChan := make(chan CommentTask, len(bugIDs)) // Channel to pass tasks between producer and consumer
+
+	// Start the consumers
+	numConsumers := 3
+	for i := 0; i < numConsumers; i++ {
+		wg.Add(1)
+		go bc.commentConsumer(taskChan, &wg)
+	}
+
+	// Start the producer
+	for _, bugID := range bugIDs {
+		go bc.commentProducer(bugID, taskChan)
+	}
+
+	// Wait for consumers to finish processing
+	wg.Wait()
+	close(taskChan)
+
+	return nil
+}
+
+// Producer: Downloads comments for a specific bug and sends them to the channel
+func (bc *BugzClient) commentProducer(bugID int64, taskChan chan<- CommentTask) {
 	apiURL := fmt.Sprintf("%s/bug/%d/comment", bc.URL, bugID)
 	params := url.Values{}
 	params.Set("token", bc.token)
@@ -353,42 +378,57 @@ func (bc *BugzClient) DownloadBugzillaComments(bugID int64) error {
 	fullURL := apiURL + "?" + params.Encode()
 	response, err := bc.http.Get(fullURL)
 	if err != nil {
-		return fmt.Errorf("error making GET request to %s: %v", fullURL, err)
+		log.Printf("Error making GET request to %s: %v", fullURL, err)
+		return
 	}
 	defer response.Body.Close()
 
 	body, err := io.ReadAll(response.Body)
 	if err != nil {
-		return fmt.Errorf("error reading response body from %s: %v", fullURL, err)
+		log.Printf("Error reading response body from %s: %v", fullURL, err)
+		return
 	}
 
 	var commentsResponse CommentsResponse
 	if err := json.Unmarshal(body, &commentsResponse); err != nil {
-		return fmt.Errorf("error decoding JSON: %v", err)
+		log.Printf("Error decoding JSON: %v", err)
+		return
 	}
 
 	comments := commentsResponse.Bugs[int(bugID)].Comments
+	taskChan <- CommentTask{BugID: bugID, Comments: comments}
+}
 
-	// Read the insert query from the embedded file
+// Consumer: Reads from the channel and inserts comments into the database
+func (bc *BugzClient) commentConsumer(taskChan <-chan CommentTask, wg *sync.WaitGroup) {
+	defer wg.Done()
+
 	insertQuery, err := schemaFS.ReadFile("insert_comments.sql")
-	commentCount := 0
-	for _, comment := range comments {
-		execOptions := sqlitex.ExecOptions{
-			Args: []interface{}{
-				comment.ID,
-				comment.BugID,
-				comment.AttachmentID,
-				comment.CreationTime,
-				comment.Creator,
-				comment.Text},
-		}
-		if err := sqlitex.Execute(bc.Db, string(insertQuery), &execOptions); err != nil {
-			return fmt.Errorf("error inserting comment: %v", err)
-		}
-		commentCount++
+	if err != nil {
+		log.Fatalf("Error reading insert_comments.sql: %v", err)
 	}
-	fmt.Printf("Downloaded %d comments for bug %d\n", commentCount, bugID)
-	return nil
+
+	for task := range taskChan {
+		commentCount := 0
+		for _, comment := range task.Comments {
+			execOptions := sqlitex.ExecOptions{
+				Args: []interface{}{
+					comment.ID,
+					comment.BugID,
+					comment.AttachmentID,
+					comment.CreationTime,
+					comment.Creator,
+					comment.Text,
+				},
+			}
+			if err := sqlitex.Execute(bc.Db, string(insertQuery), &execOptions); err != nil {
+				log.Printf("Error inserting comment for bug %d: %v", task.BugID, err)
+				continue
+			}
+			commentCount++
+		}
+		fmt.Printf("Processed %d comments for bug %d\n", commentCount, task.BugID)
+	}
 }
 
 func (bc *BugzClient) DownloadBugzillaAttachments(bugID int64) error {
