@@ -1,4 +1,4 @@
-package bugz
+package database
 
 import (
 	"fmt"

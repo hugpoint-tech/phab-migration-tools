@@ -48,7 +48,7 @@ func New(url string) Gitea {
 	}
 }
 
-func (g *Gitea) UploadBugs(bc *BugzClient) {
+func (g *Gitea) UploadBugs(bc *sqlite.Conn) {
 
 	stmt, err := prepareStmt(bc)
 	util.CheckFatal("failed to prepare statement", err)
@@ -58,8 +58,8 @@ func (g *Gitea) UploadBugs(bc *BugzClient) {
 	util.CheckFatal("error processing bug rows", err)
 }
 
-func prepareStmt(bc *BugzClient) (*sqlite.Stmt, error) {
-	stmt, err := bc.Db.Prepare("SELECT OtherFieldsJSON FROM bugs")
+func prepareStmt(db *sqlite.Conn) (*sqlite.Stmt, error) {
+	stmt, err := db.Prepare("SELECT OtherFieldsJSON FROM bugs")
 	if err != nil {
 		return nil, fmt.Errorf("failed to prepare statement: %w", err)
 	}

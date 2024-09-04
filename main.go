@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	. "hugpoint.tech/freebsd/forge/bugz"
+	"hugpoint.tech/freebsd/forge/database"
 	giteacustom "hugpoint.tech/freebsd/forge/gitea"
 	"log"
 	"os"
@@ -15,8 +16,9 @@ func main() {
 	}
 	command := os.Args[1]
 
-	bugzDatabasePath := "bugsNew.db"           // Specify the path to the database
-	bc, err := NewBugzClient(bugzDatabasePath) // Create a BugzClient instance
+	db := database.New("migrator.db")
+
+	bc, err := NewBugzClient(&db) // Create a BugzClient instance
 	if err != nil {
 		log.Fatalf("Failed to create BugzClient: %v", err)
 	}
@@ -45,7 +47,7 @@ func main() {
 		}
 	case "bugzilla-download-comments":
 		// Fetch bugs from the SQLite database
-		bugs, err := FetchBugsFromDatabase(bc.Db)
+		bugs, err := FetchBugsFromDatabase(db.Conn)
 		if err != nil {
 			log.Fatalf("Error fetching bugs: %v", err)
 		}
@@ -59,7 +61,7 @@ func main() {
 		fmt.Println("Downloaded comments for all bugs successfully.")
 	case "bugzilla-download-attachments":
 		// Fetch bugs from the SQLite database
-		bugs, err := FetchBugsFromDatabase(bc.Db)
+		bugs, err := FetchBugsFromDatabase(db.Conn)
 		if err != nil {
 			log.Fatalf("Error fetching bugs: %v", err)
 		}
@@ -82,7 +84,7 @@ func main() {
 		}
 
 		giteaClient := giteacustom.New(url)
-		giteaClient.UploadBugs(bc)
+		giteaClient.UploadBugs(db.Conn)
 
 	default:
 		fmt.Println("invalid command")

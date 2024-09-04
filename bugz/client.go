@@ -1,9 +1,10 @@
 package bugz
 
 import (
-	"embed"
 	"encoding/json"
 	"fmt"
+	"hugpoint.tech/freebsd/forge/database"
+	"hugpoint.tech/freebsd/forge/util"
 	"io"
 	"log"
 	"net/http"
@@ -19,7 +20,7 @@ type BugzClient struct {
 	token string
 	URL   string
 	http  *http.Client
-	Db    *sqlite.Conn
+	DB    *database.DB
 }
 
 type BugzLoginResponse struct {
@@ -27,24 +28,18 @@ type BugzLoginResponse struct {
 	Token string `json:"token"`
 }
 
-func NewBugzClient(databasePath string) (*BugzClient, error) {
+func NewBugzClient(db *database.DB) (*BugzClient, error) {
 	login := os.Getenv("BUGZILLA_LOGIN") //Retrieve env var values and check if they are empty
 	password := os.Getenv("BUGZILLA_PASSWORD")
 	if login == "" || password == "" {
 		log.Fatal("BUGZILLA_LOGIN or BUGZILLA_PASSWORD is not set")
 	}
 
-	// Create and initialize the database
-	db, err := CreateAndInitializeDatabase(databasePath)
-	if err != nil {
-		return nil, fmt.Errorf("error opening database: %v", err)
-	}
-
 	bc := &BugzClient{
 		URL:   "https://bugs.freebsd.org/bugzilla/rest",
 		token: "",
 		http:  &http.Client{},
-		Db:    db,
+		DB:    db,
 	}
 
 	formData := url.Values{}
@@ -75,25 +70,21 @@ func NewBugzClient(databasePath string) (*BugzClient, error) {
 }
 
 func (bc *BugzClient) InsertBug(bug Bug) error {
-
 	bugJSON, err := json.Marshal(bug)
-	if err != nil {
-		return fmt.Errorf("error marshalling bug JSON: %v", err)
-	}
+	util.CheckFatal("error marshalling bug JSON", err)
 
-	// Define the execOptions for the insert query
 	execOptions := sqlitex.ExecOptions{
-		Args: []interface{}{bug.ID, bug.CreationTime, bug.Creator, string(bugJSON)},
+		Args: []interface{}{
+			bug.ID,
+			bug.CreationTime,
+			bug.Creator,
+			string(bugJSON),
+		},
 	}
 
-	insertQuery, err := schemaFS.ReadFile("insert.sql")
-	if err != nil {
-		return err
-	}
+	err = sqlitex.ExecuteTransient(bc.DB.Conn, bc.DB.QInsertBug, &execOptions)
+	util.CheckFatal("error executing insert bug statement", err)
 
-	if err := sqlitex.ExecuteTransient(bc.Db, string(insertQuery), &execOptions); err != nil {
-		fmt.Errorf("error executing insert statement: %v", err)
-	}
 	return nil
 }
 
@@ -259,19 +250,28 @@ func extractIDs(bug Bug) map[int]User {
 }
 
 func (bc *BugzClient) DownloadBugzillaUsers() error {
+	var users []User
 
 	// Execute distinct query on the bugs table to retrieve unique user data
-	users, err := GetDistinctUsers(bc.Db)
+	bc.DB.GetDistinctUsers(func(stmt *sqlite.Stmt) error {
+		user := User{
+			Email:    stmt.ColumnText(0),
+			Name:     stmt.ColumnText(1),
+			RealName: stmt.ColumnText(2),
+		}
+		if user.Email == "" && user.Name == "" && user.RealName == "" {
+			log.Printf("Empty user detected: %+v", user)
+		} else {
+			users = append(users, user)
+		}
+		return nil
+	})
 
-	if err != nil {
-		return fmt.Errorf("error getting distinct users: %v", err)
+	// Debug: Print all retrieved users
+	for _, user := range users {
+		fmt.Printf("Retrieved user: %+v\n", user)
 	}
 
-	// Read the insert query from the embedded file
-	insertQuery, err := schemaFS.ReadFile("insert_user.sql")
-	if err != nil {
-		return fmt.Errorf("failed to read insert query: %v", err)
-	}
 	userCount := 0
 	// Insert each user into the users table
 	for _, user := range users {
@@ -279,70 +279,13 @@ func (bc *BugzClient) DownloadBugzillaUsers() error {
 			Args: []interface{}{user.Email, user.Name, user.RealName},
 		}
 
-		if err := sqlitex.Execute(bc.Db, string(insertQuery), &execOptions); err != nil {
+		if err := sqlitex.Execute(bc.DB.Conn, bc.DB.QInsertUsers, &execOptions); err != nil {
 			return fmt.Errorf("error inserting user: %v", err)
 		}
 		userCount++
 	}
 	fmt.Printf("Downloaded %d unique users\n", userCount)
 	return nil
-}
-
-//go:embed *.sql
-var schemaFS embed.FS
-
-// CreateAndInitializeDatabase as a standalone function
-func CreateAndInitializeDatabase(databasePath string) (*sqlite.Conn, error) {
-	db, err := sqlite.OpenConn(databasePath, 0)
-	if err != nil {
-		return nil, fmt.Errorf("error opening database: %v", err)
-	}
-
-	// Read the schema from the embedded file
-	schema, err := schemaFS.ReadFile("schema.sql")
-	if err != nil {
-		return nil, fmt.Errorf("failed to read schema: %v", err)
-	}
-
-	if err := sqlitex.ExecScript(db, string(schema)); err != nil {
-		return nil, fmt.Errorf("error applying schema: %v", err)
-	}
-	return db, nil
-}
-
-func GetDistinctUsers(db *sqlite.Conn) ([]User, error) {
-	query, err := schemaFS.ReadFile("distinct.sql")
-	if err != nil {
-		log.Fatalf("Failed to read query: %v", err)
-	}
-
-	var users []User
-	execOptions := &sqlitex.ExecOptions{
-		ResultFunc: func(stmt *sqlite.Stmt) error {
-			user := User{
-				Email:    stmt.ColumnText(0),
-				Name:     stmt.ColumnText(1),
-				RealName: stmt.ColumnText(2),
-			}
-			if user.Email == "" && user.Name == "" && user.RealName == "" {
-				log.Printf("Empty user detected: %+v", user)
-			} else {
-				users = append(users, user)
-			}
-			return nil
-		},
-	}
-
-	if err := sqlitex.ExecuteTransient(db, string(query), execOptions); err != nil {
-		log.Fatalf("Failed to execute query: %v", err)
-	}
-
-	// Debug: Print all retrieved users
-	for _, user := range users {
-		fmt.Printf("Retrieved user: %+v\n", user)
-	}
-
-	return users, nil
 }
 
 func (bc *BugzClient) DownloadBugzillaComments(bugID int64) error {
@@ -368,9 +311,6 @@ func (bc *BugzClient) DownloadBugzillaComments(bugID int64) error {
 	}
 
 	comments := commentsResponse.Bugs[int(bugID)].Comments
-
-	// Read the insert query from the embedded file
-	insertQuery, err := schemaFS.ReadFile("insert_comments.sql")
 	commentCount := 0
 	for _, comment := range comments {
 		execOptions := sqlitex.ExecOptions{
@@ -382,7 +322,7 @@ func (bc *BugzClient) DownloadBugzillaComments(bugID int64) error {
 				comment.Creator,
 				comment.Text},
 		}
-		if err := sqlitex.Execute(bc.Db, string(insertQuery), &execOptions); err != nil {
+		if err := sqlitex.Execute(bc.DB.Conn, bc.DB.QInsertComments, &execOptions); err != nil {
 			return fmt.Errorf("error inserting comment: %v", err)
 		}
 		commentCount++
@@ -416,7 +356,7 @@ func (bc *BugzClient) DownloadBugzillaAttachments(bugID int64) error {
 	attachments := attachmentsResponse.Bugs[int(bugID)]
 
 	// Read the insert query from the embedded file
-	insertQuery, err := schemaFS.ReadFile("insert_attachments.sql")
+
 	attachmentsCount := 0
 	for _, attachment := range attachments {
 		execOptions := sqlitex.ExecOptions{
@@ -428,7 +368,7 @@ func (bc *BugzClient) DownloadBugzillaAttachments(bugID int64) error {
 				attachment.Summary,
 				attachment.Data},
 		}
-		if err := sqlitex.Execute(bc.Db, string(insertQuery), &execOptions); err != nil {
+		if err := sqlitex.Execute(bc.DB.Conn, bc.DB.QInsertAttachments, &execOptions); err != nil {
 			return fmt.Errorf("error inserting attachment: %v", err)
 		}
 		attachmentsCount++
