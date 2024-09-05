@@ -10,8 +10,10 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
+	"time"
 	"zombiezen.com/go/sqlite"
 	"zombiezen.com/go/sqlite/sqlitex"
 )
@@ -349,9 +351,10 @@ func GetDistinctUsers(db *sqlite.Conn) ([]User, error) {
 func (bc *BugzClient) DownloadBugzillaComments(bugIDs []int64) error {
 	var wg sync.WaitGroup
 	taskChan := make(chan CommentTask, len(bugIDs)) // Channel to pass tasks between producer and consumer
+	semaphore := make(chan struct{}, 20)            // Limit concurrent connections to 20
 
 	// Start the consumers
-	numConsumers := 3
+	numConsumers := runtime.NumCPU() // Use number of CPU cores as consumer count
 	for i := 0; i < numConsumers; i++ {
 		wg.Add(1)
 		go bc.commentConsumer(taskChan, &wg)
@@ -359,7 +362,11 @@ func (bc *BugzClient) DownloadBugzillaComments(bugIDs []int64) error {
 
 	// Start the producer
 	for _, bugID := range bugIDs {
-		go bc.commentProducer(bugID, taskChan)
+		semaphore <- struct{}{} // Acquire slot for a connection
+		go func(bugID int64) {
+			defer func() { <-semaphore }() // Release slot after completion
+			bc.commentProducer(bugID, taskChan)
+		}(bugID)
 	}
 
 	// Wait for consumers to finish processing
@@ -376,9 +383,28 @@ func (bc *BugzClient) commentProducer(bugID int64, taskChan chan<- CommentTask) 
 	params.Set("token", bc.token)
 
 	fullURL := apiURL + "?" + params.Encode()
-	response, err := bc.http.Get(fullURL)
+	maxRetries := 3
+	var response *http.Response
+	var err error
+
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		response, err = bc.http.Get(fullURL)
+		if err == nil {
+			break
+		}
+
+		if err == io.EOF || os.IsTimeout(err) {
+			log.Printf("Error making GET request to %s (attempt %d/%d): %v", fullURL, attempt, maxRetries, err)
+			time.Sleep(time.Duration(attempt) * time.Second) // Exponential backoff
+			continue
+		} else {
+			log.Printf("Fatal error making GET request to %s: %v", fullURL, err)
+			return
+		}
+	}
+
 	if err != nil {
-		log.Printf("Error making GET request to %s: %v", fullURL, err)
+		log.Printf("Failed to make GET request to %s after %d attempts: %v", fullURL, maxRetries, err)
 		return
 	}
 	defer response.Body.Close()
@@ -389,9 +415,10 @@ func (bc *BugzClient) commentProducer(bugID int64, taskChan chan<- CommentTask) 
 		return
 	}
 
+	// Log the response if JSON decoding fails
 	var commentsResponse CommentsResponse
 	if err := json.Unmarshal(body, &commentsResponse); err != nil {
-		log.Printf("Error decoding JSON: %v", err)
+		log.Printf("Error decoding JSON from %s: %v. Response body: %s", fullURL, err, string(body))
 		return
 	}
 
@@ -400,6 +427,8 @@ func (bc *BugzClient) commentProducer(bugID int64, taskChan chan<- CommentTask) 
 }
 
 // Consumer: Reads from the channel and inserts comments into the database
+var dbMutex sync.Mutex
+
 func (bc *BugzClient) commentConsumer(taskChan <-chan CommentTask, wg *sync.WaitGroup) {
 	defer wg.Done()
 
@@ -421,10 +450,15 @@ func (bc *BugzClient) commentConsumer(taskChan <-chan CommentTask, wg *sync.Wait
 					comment.Text,
 				},
 			}
+
+			dbMutex.Lock() // Ensure only one goroutine is writing to the database at a time
 			if err := sqlitex.Execute(bc.Db, string(insertQuery), &execOptions); err != nil {
 				log.Printf("Error inserting comment for bug %d: %v", task.BugID, err)
+				dbMutex.Unlock()
 				continue
 			}
+			dbMutex.Unlock()
+
 			commentCount++
 		}
 		fmt.Printf("Processed %d comments for bug %d\n", commentCount, task.BugID)
