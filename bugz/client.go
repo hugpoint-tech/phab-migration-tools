@@ -11,7 +11,10 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
+	"sync"
+	"time"
 	"zombiezen.com/go/sqlite"
 	"zombiezen.com/go/sqlite/sqlitex"
 )
@@ -288,93 +291,237 @@ func (bc *BugzClient) DownloadBugzillaUsers() error {
 	return nil
 }
 
-func (bc *BugzClient) DownloadBugzillaComments(bugID int64) error {
+func (bc *BugzClient) DownloadBugzillaComments(bugIDs []int64) error {
+	var wg sync.WaitGroup
+	taskChan := make(chan CommentTask, len(bugIDs)) // Channel to pass tasks between producer and consumer
+	semaphore := make(chan struct{}, 20)            // Limit concurrent connections to 20
+
+	// Start the consumers
+	numConsumers := runtime.NumCPU() // Use number of CPU cores as consumer count
+	for i := 0; i < numConsumers; i++ {
+		wg.Add(1)
+		go bc.commentConsumer(taskChan, &wg)
+	}
+
+	// Start the producer
+	for _, bugID := range bugIDs {
+		semaphore <- struct{}{} // Acquire slot for a connection
+		go func(bugID int64) {
+			defer func() { <-semaphore }() // Release slot after completion
+			bc.commentProducer(bugID, taskChan)
+		}(bugID)
+	}
+
+	// Wait for consumers to finish processing
+	wg.Wait()
+	close(taskChan)
+
+	return nil
+}
+
+// Producer: Downloads comments for a specific bug and sends them to the channel
+func (bc *BugzClient) commentProducer(bugID int64, taskChan chan<- CommentTask) {
 	apiURL := fmt.Sprintf("%s/bug/%d/comment", bc.URL, bugID)
 	params := url.Values{}
 	params.Set("token", bc.token)
 
 	fullURL := apiURL + "?" + params.Encode()
-	response, err := bc.http.Get(fullURL)
+	maxRetries := 3
+	var response *http.Response
+	var err error
+
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		response, err = bc.http.Get(fullURL)
+		if err == nil {
+			break
+		}
+
+		if err == io.EOF || os.IsTimeout(err) {
+			log.Printf("Error making GET request to %s (attempt %d/%d): %v", fullURL, attempt, maxRetries, err)
+			time.Sleep(time.Duration(attempt) * time.Second) // Exponential backoff
+			continue
+		} else {
+			log.Printf("Fatal error making GET request to %s: %v", fullURL, err)
+			return
+		}
+	}
+
 	if err != nil {
-		return fmt.Errorf("error making GET request to %s: %v", fullURL, err)
+		log.Printf("Failed to make GET request to %s after %d attempts: %v", fullURL, maxRetries, err)
+		return
 	}
 	defer response.Body.Close()
 
 	body, err := io.ReadAll(response.Body)
 	if err != nil {
-		return fmt.Errorf("error reading response body from %s: %v", fullURL, err)
+		log.Printf("Error reading response body from %s: %v", fullURL, err)
+		return
 	}
 
+	// Log the response if JSON decoding fails
 	var commentsResponse CommentsResponse
 	if err := json.Unmarshal(body, &commentsResponse); err != nil {
-		return fmt.Errorf("error decoding JSON: %v", err)
+		log.Printf("Error decoding JSON from %s: %v. Response body: %s", fullURL, err, string(body))
+		return
 	}
 
 	comments := commentsResponse.Bugs[int(bugID)].Comments
-	commentCount := 0
-	for _, comment := range comments {
-		execOptions := sqlitex.ExecOptions{
-			Args: []interface{}{
-				comment.ID,
-				comment.BugID,
-				comment.AttachmentID,
-				comment.CreationTime,
-				comment.Creator,
-				comment.Text},
-		}
-		if err := sqlitex.Execute(bc.DB.Conn, bc.DB.QInsertComments, &execOptions); err != nil {
-			return fmt.Errorf("error inserting comment: %v", err)
-		}
-		commentCount++
+	taskChan <- CommentTask{BugID: bugID, Comments: comments}
+}
+
+// Mutual exclusion lock variable
+var dbMutex sync.Mutex
+
+// Consumer: Reads from the channel and inserts comments into the database
+func (bc *BugzClient) commentConsumer(taskChan <-chan CommentTask, wg *sync.WaitGroup) {
+	defer wg.Done()
+
+	db := database.New("bugsNew.db")
+
+	insertQuery := db.QInsertComments
+	if insertQuery == "" {
+		log.Fatalf("Error: Insert comment query is empty")
 	}
-	fmt.Printf("Downloaded %d comments for bug %d\n", commentCount, bugID)
+
+	for task := range taskChan {
+		commentCount := 0
+		for _, comment := range task.Comments {
+			execOptions := sqlitex.ExecOptions{
+				Args: []interface{}{
+					comment.ID,
+					comment.BugID,
+					comment.AttachmentID,
+					comment.CreationTime,
+					comment.Creator,
+					comment.Text,
+				},
+			}
+
+			dbMutex.Lock() // Ensure only one goroutine is writing to the database at a time
+			if err := sqlitex.Execute(db.Conn, insertQuery, &execOptions); err != nil {
+				log.Printf("Error inserting comment for bug %d: %v", task.BugID, err)
+				dbMutex.Unlock()
+				continue
+			}
+			dbMutex.Unlock()
+
+			commentCount++
+		}
+		fmt.Printf("Processed %d comments for bug %d\n", commentCount, task.BugID)
+	}
+}
+
+func (bc *BugzClient) DownloadBugzillaAttachments(bugIDs []int64) error {
+	var wg sync.WaitGroup
+	taskChan := make(chan AttachmentTask, len(bugIDs)) // Channel to pass tasks between producer and consumer
+	semaphore := make(chan struct{}, 20)               // Limit concurrent connections to 20
+
+	// Start the consumers
+	numConsumers := runtime.NumCPU() // Use number of CPU cores as consumer count
+	for i := 0; i < numConsumers; i++ {
+		wg.Add(1)
+		go bc.attachmentConsumer(taskChan, &wg)
+	}
+
+	// Start the producer
+	for _, bugID := range bugIDs {
+		semaphore <- struct{}{} // Acquire slot for a connection
+		go func(bugID int64) {
+			defer func() { <-semaphore }() // Release slot after completion
+			bc.attachmentProducer(bugID, taskChan)
+		}(bugID)
+	}
+
+	// Wait for consumers to finish processing
+	wg.Wait()
+	close(taskChan)
+
 	return nil
 }
 
-func (bc *BugzClient) DownloadBugzillaAttachments(bugID int64) error {
+// Producer: Downloads attachments for a specific bug and sends them to the channel
+func (bc *BugzClient) attachmentProducer(bugID int64, taskChan chan<- AttachmentTask) {
 	apiURL := fmt.Sprintf("%s/bug/%d/attachment", bc.URL, bugID)
 	params := url.Values{}
 	params.Set("token", bc.token)
 
 	fullURL := apiURL + "?" + params.Encode()
-	response, err := bc.http.Get(fullURL)
+	maxRetries := 3
+	var response *http.Response
+	var err error
+
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		response, err = bc.http.Get(fullURL)
+		if err == nil {
+			break
+		}
+
+		if err == io.EOF || os.IsTimeout(err) {
+			log.Printf("Error making GET request to %s (attempt %d/%d): %v", fullURL, attempt, maxRetries, err)
+			time.Sleep(time.Duration(attempt) * time.Second) // Exponential backoff
+			continue
+		} else {
+			log.Printf("Fatal error making GET request to %s: %v", fullURL, err)
+			return
+		}
+	}
 	if err != nil {
-		return fmt.Errorf("error making GET request to %s: %v", fullURL, err)
+		log.Printf("Failed to make GET request to %s after %d attempts: %v", fullURL, maxRetries, err)
+		return
 	}
 	defer response.Body.Close()
 
 	body, err := io.ReadAll(response.Body)
 	if err != nil {
-		return fmt.Errorf("error reading response body from %s: %v", fullURL, err)
+		log.Printf("Error reading response body from %s: %v", fullURL, err)
+		return
 	}
 
-	var attachmentsResponse AttachmentsResponse
+	var attachmentsResponse AttachmentResponse
 	if err := json.Unmarshal(body, &attachmentsResponse); err != nil {
-		return fmt.Errorf("error decoding JSON: %v", err)
+		fmt.Errorf("error decoding JSON: %v", err)
 	}
 
-	attachments := attachmentsResponse.Bugs[int(bugID)]
+	attachments := attachmentsResponse.Bugs[fmt.Sprintf("%d", bugID)]
+	taskChan <- AttachmentTask{BugID: bugID, Attachments: attachments}
+}
 
-	// Read the insert query from the embedded file
+// Consumer: Reads from the channel and inserts attachments into the database
+func (bc *BugzClient) attachmentConsumer(taskChan <-chan AttachmentTask, wg *sync.WaitGroup) {
+	defer wg.Done()
 
-	attachmentsCount := 0
-	for _, attachment := range attachments {
-		execOptions := sqlitex.ExecOptions{
-			Args: []interface{}{
-				attachment.ID,
-				attachment.BugID,
-				attachment.CreationTime,
-				attachment.Creator,
-				attachment.Summary,
-				attachment.Data},
-		}
-		if err := sqlitex.Execute(bc.DB.Conn, bc.DB.QInsertAttachments, &execOptions); err != nil {
-			return fmt.Errorf("error inserting attachment: %v", err)
-		}
-		attachmentsCount++
+	db := database.New("bugsNew.db")
+
+	insertQuery := db.QInsertAttachments
+	if insertQuery == "" {
+		log.Fatalf("Error: Insert attachment query is empty")
 	}
-	fmt.Printf("Downloaded %d attachments for bug %d\n", attachmentsCount, bugID)
-	return nil
+
+	for task := range taskChan {
+		attachmentsCount := 0
+		for _, attachment := range task.Attachments {
+			execOptions := sqlitex.ExecOptions{
+				Args: []interface{}{
+					attachment.ID,
+					attachment.BugID,
+					attachment.CreationTime,
+					attachment.Creator,
+					attachment.Summary,
+					attachment.Data,
+				},
+			}
+			dbMutex.Lock() // Ensure only one goroutine is writing to the database at a time
+			if err := sqlitex.Execute(db.Conn, insertQuery, &execOptions); err != nil {
+				log.Printf("Error inserting attachment for bug %d: %v", task.BugID, err)
+				dbMutex.Unlock()
+				continue
+			}
+			dbMutex.Unlock()
+
+			attachmentsCount++
+		}
+		fmt.Printf("Processed %d attachments for bug %d\n", attachmentsCount, task.BugID)
+	}
 }
 
 func FetchBugsFromDatabase(db *sqlite.Conn) ([]Bug, error) {

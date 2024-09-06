@@ -16,7 +16,7 @@ func main() {
 	}
 	command := os.Args[1]
 
-	db := database.New("migrator.db")
+	db := database.New("bugsNew.db")
 
 	bc, err := NewBugzClient(&db) // Create a BugzClient instance
 	if err != nil {
@@ -51,13 +51,18 @@ func main() {
 		if err != nil {
 			log.Fatalf("Error fetching bugs: %v", err)
 		}
-		// Download comments for each bug
+		// Convert bug IDs to a slice of int64 for processing
+		var bugIDs []int64
 		for _, bug := range bugs {
-			err := bc.DownloadBugzillaComments(int64(bug.ID))
-			if err != nil {
-				fmt.Printf("Error downloading comments for bug %d: %v", bug.ID, err)
-			}
+			bugIDs = append(bugIDs, int64(bug.ID))
 		}
+
+		// Download comments using the producer-consumer pattern
+		err = bc.DownloadBugzillaComments(bugIDs)
+		if err != nil {
+			log.Fatalf("Error downloading comments: %v", err)
+		}
+
 		fmt.Println("Downloaded comments for all bugs successfully.")
 	case "bugzilla-download-attachments":
 		// Fetch bugs from the SQLite database
@@ -65,13 +70,18 @@ func main() {
 		if err != nil {
 			log.Fatalf("Error fetching bugs: %v", err)
 		}
-		// Download attachments for each bug
+		// Convert bug IDs to a slice of int64 for processing
+		var bugIDs []int64
 		for _, bug := range bugs {
-			err := bc.DownloadBugzillaAttachments(int64(bug.ID))
-			if err != nil {
-				fmt.Printf("Error downloading attachments for bug %d: %v", bug.ID, err)
-			}
+			bugIDs = append(bugIDs, int64(bug.ID))
 		}
+
+		// Download attachments using the producer-consumer pattern
+		err = bc.DownloadBugzillaAttachments(bugIDs)
+		if err != nil {
+			log.Fatalf("Error downloading comments: %v", err)
+		}
+
 		fmt.Println("Downloaded attachments for all bugs successfully.")
 	case "gitea-upload-bugs":
 
