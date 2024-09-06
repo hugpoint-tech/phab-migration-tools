@@ -69,13 +69,19 @@ func main() {
 		if err != nil {
 			log.Fatalf("Error fetching bugs: %v", err)
 		}
-		// Download attachments for each bug
+
+		// Convert bug IDs to a slice of int64 for processing
+		var bugIDs []int64
 		for _, bug := range bugs {
-			err := bc.DownloadBugzillaAttachments(int64(bug.ID))
-			if err != nil {
-				fmt.Printf("Error downloading attachments for bug %d: %v", bug.ID, err)
-			}
+			bugIDs = append(bugIDs, int64(bug.ID))
 		}
+
+		// Download attachments using the producer-consumer pattern
+		err = bc.DownloadBugzillaAttachments(bugIDs)
+		if err != nil {
+			log.Fatalf("Error downloading comments: %v", err)
+		}
+
 		fmt.Println("Downloaded attachments for all bugs successfully.")
 	case "gitea-upload-bugs":
 

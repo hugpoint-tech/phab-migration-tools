@@ -106,11 +106,18 @@ type CommentsResponse struct {
 	} `json:"bugs"`
 }
 
-type AttachmentsResponse struct {
-	Bugs map[int][]Attachment `json:"bugs"`
-}
-
 type CommentTask struct {
 	BugID    int64
 	Comments []Comment
+}
+
+type AttachmentTask struct {
+	BugID       int64
+	Attachments []Attachment
+}
+
+// Define the response struct to handle both bugs and attachments.
+type AttachmentResponse struct {
+	Bugs        map[string][]Attachment `json:"bugs"`        // Bug ID is a string and maps to an array of attachments
+	Attachments map[string]Attachment   `json:"attachments"` // Attachment ID is a string mapping to an attachment
 }

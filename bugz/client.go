@@ -426,9 +426,10 @@ func (bc *BugzClient) commentProducer(bugID int64, taskChan chan<- CommentTask) 
 	taskChan <- CommentTask{BugID: bugID, Comments: comments}
 }
 
-// Consumer: Reads from the channel and inserts comments into the database
+// Mutual exclusion lock variable
 var dbMutex sync.Mutex
 
+// Consumer: Reads from the channel and inserts comments into the database
 func (bc *BugzClient) commentConsumer(taskChan <-chan CommentTask, wg *sync.WaitGroup) {
 	defer wg.Done()
 
@@ -465,50 +466,115 @@ func (bc *BugzClient) commentConsumer(taskChan <-chan CommentTask, wg *sync.Wait
 	}
 }
 
-func (bc *BugzClient) DownloadBugzillaAttachments(bugID int64) error {
+func (bc *BugzClient) DownloadBugzillaAttachments(bugIDs []int64) error {
+	var wg sync.WaitGroup
+	taskChan := make(chan AttachmentTask, len(bugIDs)) // Channel to pass tasks between producer and consumer
+	semaphore := make(chan struct{}, 20)               // Limit concurrent connections to 20
+
+	// Start the consumers
+	numConsumers := runtime.NumCPU() // Use number of CPU cores as consumer count
+	for i := 0; i < numConsumers; i++ {
+		wg.Add(1)
+		go bc.attachmentConsumer(taskChan, &wg)
+	}
+
+	// Start the producer
+	for _, bugID := range bugIDs {
+		semaphore <- struct{}{} // Acquire slot for a connection
+		go func(bugID int64) {
+			defer func() { <-semaphore }() // Release slot after completion
+			bc.attachmentProducer(bugID, taskChan)
+		}(bugID)
+	}
+
+	// Wait for consumers to finish processing
+	wg.Wait()
+	close(taskChan)
+
+	return nil
+}
+
+// Producer: Downloads attachments for a specific bug and sends them to the channel
+func (bc *BugzClient) attachmentProducer(bugID int64, taskChan chan<- AttachmentTask) {
 	apiURL := fmt.Sprintf("%s/bug/%d/attachment", bc.URL, bugID)
 	params := url.Values{}
 	params.Set("token", bc.token)
 
 	fullURL := apiURL + "?" + params.Encode()
-	response, err := bc.http.Get(fullURL)
+	maxRetries := 3
+	var response *http.Response
+	var err error
+
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		response, err = bc.http.Get(fullURL)
+		if err == nil {
+			break
+		}
+
+		if err == io.EOF || os.IsTimeout(err) {
+			log.Printf("Error making GET request to %s (attempt %d/%d): %v", fullURL, attempt, maxRetries, err)
+			time.Sleep(time.Duration(attempt) * time.Second) // Exponential backoff
+			continue
+		} else {
+			log.Printf("Fatal error making GET request to %s: %v", fullURL, err)
+			return
+		}
+	}
 	if err != nil {
-		return fmt.Errorf("error making GET request to %s: %v", fullURL, err)
+		log.Printf("Failed to make GET request to %s after %d attempts: %v", fullURL, maxRetries, err)
+		return
 	}
 	defer response.Body.Close()
 
 	body, err := io.ReadAll(response.Body)
 	if err != nil {
-		return fmt.Errorf("error reading response body from %s: %v", fullURL, err)
+		log.Printf("Error reading response body from %s: %v", fullURL, err)
+		return
 	}
 
-	var attachmentsResponse AttachmentsResponse
+	var attachmentsResponse AttachmentResponse
 	if err := json.Unmarshal(body, &attachmentsResponse); err != nil {
-		return fmt.Errorf("error decoding JSON: %v", err)
+		fmt.Errorf("error decoding JSON: %v", err)
 	}
 
-	attachments := attachmentsResponse.Bugs[int(bugID)]
+	attachments := attachmentsResponse.Bugs[fmt.Sprintf("%d", bugID)]
+	taskChan <- AttachmentTask{BugID: bugID, Attachments: attachments}
+}
 
-	// Read the insert query from the embedded file
+// Consumer: Reads from the channel and inserts attachments into the database
+func (bc *BugzClient) attachmentConsumer(taskChan <-chan AttachmentTask, wg *sync.WaitGroup) {
+	defer wg.Done()
+
 	insertQuery, err := schemaFS.ReadFile("insert_attachments.sql")
-	attachmentsCount := 0
-	for _, attachment := range attachments {
-		execOptions := sqlitex.ExecOptions{
-			Args: []interface{}{
-				attachment.ID,
-				attachment.BugID,
-				attachment.CreationTime,
-				attachment.Creator,
-				attachment.Summary,
-				attachment.Data},
-		}
-		if err := sqlitex.Execute(bc.Db, string(insertQuery), &execOptions); err != nil {
-			return fmt.Errorf("error inserting attachment: %v", err)
-		}
-		attachmentsCount++
+	if err != nil {
+		log.Fatalf("Error reading insert_attachments.sql: %v", err)
 	}
-	fmt.Printf("Downloaded %d attachments for bug %d\n", attachmentsCount, bugID)
-	return nil
+
+	for task := range taskChan {
+		attachmentsCount := 0
+		for _, attachment := range task.Attachments {
+			execOptions := sqlitex.ExecOptions{
+				Args: []interface{}{
+					attachment.ID,
+					attachment.BugID,
+					attachment.CreationTime,
+					attachment.Creator,
+					attachment.Summary,
+					attachment.Data,
+				},
+			}
+			dbMutex.Lock() // Ensure only one goroutine is writing to the database at a time
+			if err := sqlitex.Execute(bc.Db, string(insertQuery), &execOptions); err != nil {
+				log.Printf("Error inserting attachment for bug %d: %v", task.BugID, err)
+				dbMutex.Unlock()
+				continue
+			}
+			dbMutex.Unlock()
+
+			attachmentsCount++
+		}
+		fmt.Printf("Processed %d attachments for bug %d\n", attachmentsCount, task.BugID)
+	}
 }
 
 func FetchBugsFromDatabase(db *sqlite.Conn) ([]Bug, error) {
