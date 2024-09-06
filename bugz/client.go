@@ -376,7 +376,7 @@ var dbMutex sync.Mutex
 func (bc *BugzClient) commentConsumer(taskChan <-chan CommentTask, wg *sync.WaitGroup) {
 	defer wg.Done()
 
-	db := database.New("bugsNew.db")
+	db := database.New(database.Dbpath)
 
 	insertQuery := db.QInsertComments
 	if insertQuery == "" {
@@ -490,7 +490,7 @@ func (bc *BugzClient) attachmentProducer(bugID int64, taskChan chan<- Attachment
 func (bc *BugzClient) attachmentConsumer(taskChan <-chan AttachmentTask, wg *sync.WaitGroup) {
 	defer wg.Done()
 
-	db := database.New("bugsNew.db")
+	db := database.New(database.Dbpath)
 
 	insertQuery := db.QInsertAttachments
 	if insertQuery == "" {

@@ -16,7 +16,7 @@ func main() {
 	}
 	command := os.Args[1]
 
-	db := database.New("bugsNew.db")
+	db := database.New(database.Dbpath)
 
 	bc, err := NewBugzClient(&db) // Create a BugzClient instance
 	if err != nil {

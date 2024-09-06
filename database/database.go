@@ -10,6 +10,8 @@ import (
 //go:embed *.sql
 var schemaFS embed.FS
 
+const Dbpath = "migrator.db"
+
 type DB struct {
 	Conn *sqlite.Conn
 
