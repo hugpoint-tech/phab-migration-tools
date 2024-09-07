@@ -291,7 +291,7 @@ func (bc *BugzClient) DownloadBugzillaUsers() error {
 	return nil
 }
 
-func (bc *BugzClient) DownloadBugzillaComments(bugIDs []int64) error {
+func (bc *BugzClient) DownloadBugzillaComments(db database.DB, bugIDs []int64) error {
 	var wg sync.WaitGroup
 	taskChan := make(chan CommentTask, len(bugIDs)) // Channel to pass tasks between producer and consumer
 	semaphore := make(chan struct{}, 20)            // Limit concurrent connections to 20
@@ -300,7 +300,7 @@ func (bc *BugzClient) DownloadBugzillaComments(bugIDs []int64) error {
 	numConsumers := runtime.NumCPU() // Use number of CPU cores as consumer count
 	for i := 0; i < numConsumers; i++ {
 		wg.Add(1)
-		go bc.commentConsumer(taskChan, &wg)
+		go bc.commentConsumer(db, taskChan, &wg)
 	}
 
 	// Start the producer
@@ -373,10 +373,8 @@ func (bc *BugzClient) commentProducer(bugID int64, taskChan chan<- CommentTask) 
 var dbMutex sync.Mutex
 
 // Consumer: Reads from the channel and inserts comments into the database
-func (bc *BugzClient) commentConsumer(taskChan <-chan CommentTask, wg *sync.WaitGroup) {
+func (bc *BugzClient) commentConsumer(db database.DB, taskChan <-chan CommentTask, wg *sync.WaitGroup) {
 	defer wg.Done()
-
-	db := database.New(database.Dbpath)
 
 	insertQuery := db.QInsertComments
 	if insertQuery == "" {
@@ -411,7 +409,7 @@ func (bc *BugzClient) commentConsumer(taskChan <-chan CommentTask, wg *sync.Wait
 	}
 }
 
-func (bc *BugzClient) DownloadBugzillaAttachments(bugIDs []int64) error {
+func (bc *BugzClient) DownloadBugzillaAttachments(db database.DB, bugIDs []int64) error {
 	var wg sync.WaitGroup
 	taskChan := make(chan AttachmentTask, len(bugIDs)) // Channel to pass tasks between producer and consumer
 	semaphore := make(chan struct{}, 20)               // Limit concurrent connections to 20
@@ -420,7 +418,7 @@ func (bc *BugzClient) DownloadBugzillaAttachments(bugIDs []int64) error {
 	numConsumers := runtime.NumCPU() // Use number of CPU cores as consumer count
 	for i := 0; i < numConsumers; i++ {
 		wg.Add(1)
-		go bc.attachmentConsumer(taskChan, &wg)
+		go bc.attachmentConsumer(db, taskChan, &wg)
 	}
 
 	// Start the producer
@@ -487,10 +485,8 @@ func (bc *BugzClient) attachmentProducer(bugID int64, taskChan chan<- Attachment
 }
 
 // Consumer: Reads from the channel and inserts attachments into the database
-func (bc *BugzClient) attachmentConsumer(taskChan <-chan AttachmentTask, wg *sync.WaitGroup) {
+func (bc *BugzClient) attachmentConsumer(db database.DB, taskChan <-chan AttachmentTask, wg *sync.WaitGroup) {
 	defer wg.Done()
-
-	db := database.New(database.Dbpath)
 
 	insertQuery := db.QInsertAttachments
 	if insertQuery == "" {

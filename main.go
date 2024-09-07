@@ -58,7 +58,7 @@ func main() {
 		}
 
 		// Download comments using the producer-consumer pattern
-		err = bc.DownloadBugzillaComments(bugIDs)
+		err = bc.DownloadBugzillaComments(db, bugIDs)
 		if err != nil {
 			log.Fatalf("Error downloading comments: %v", err)
 		}
@@ -77,7 +77,7 @@ func main() {
 		}
 
 		// Download attachments using the producer-consumer pattern
-		err = bc.DownloadBugzillaAttachments(bugIDs)
+		err = bc.DownloadBugzillaAttachments(db, bugIDs)
 		if err != nil {
 			log.Fatalf("Error downloading comments: %v", err)
 		}
