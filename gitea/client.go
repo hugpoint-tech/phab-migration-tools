@@ -4,7 +4,7 @@ import (
 	"code.gitea.io/sdk/gitea"
 	"encoding/json"
 	"fmt"
-	. "hugpoint.tech/freebsd/forge/bugz"
+	. "hugpoint.tech/freebsd/forge/common/bugzilla"
 	"hugpoint.tech/freebsd/forge/util"
 	"os"
 	"zombiezen.com/go/sqlite"
