@@ -358,7 +358,7 @@ func (bc *BugzClient) DownloadBugzillaAttachments(bugID int64) error {
 	return nil
 }
 
-func FetchBugsFromDatabase(db *sqlite.Conn) ([]Bug, error) {
+func ListBugs(db *sqlite.Conn) ([]Bug, error) {
 	var bugs []Bug
 	query := "SELECT id FROM bugs"
 	stmt := db.Prep(query)

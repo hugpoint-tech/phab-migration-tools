@@ -42,7 +42,7 @@ func main() {
 		}
 	case "bugzilla-download-comments":
 		// Fetch bugs from the SQLite database
-		bugs, err := FetchBugsFromDatabase(db.Conn)
+		bugs, err := ListBugs(db.Conn)
 		if err != nil {
 			log.Fatalf("Error fetching bugs: %v", err)
 		}
@@ -56,7 +56,7 @@ func main() {
 		fmt.Println("Downloaded comments for all bugs successfully.")
 	case "bugzilla-download-attachments":
 		// Fetch bugs from the SQLite database
-		bugs, err := FetchBugsFromDatabase(db.Conn)
+		bugs, err := ListBugs(db.Conn)
 		if err != nil {
 			log.Fatalf("Error fetching bugs: %v", err)
 		}
