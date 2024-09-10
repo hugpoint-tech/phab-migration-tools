@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"hugpoint.tech/freebsd/forge/common/bugzilla"
 	"hugpoint.tech/freebsd/forge/util"
+	"log"
 	"zombiezen.com/go/sqlite"
 	"zombiezen.com/go/sqlite/sqlitex"
 )
@@ -57,14 +58,33 @@ func New(path string) DB {
 	return result
 }
 
-func (db *DB) GetDistinctUsers(resultFunc func(stmt *sqlite.Stmt) error) {
+func (db *DB) GetDistinctUsers() ([]bugzilla.User, error) {
+	var users []bugzilla.User
 
 	execOptions := &sqlitex.ExecOptions{
-		ResultFunc: resultFunc,
+		ResultFunc: func(stmt *sqlite.Stmt) error {
+			user := bugzilla.User{
+				Email:    stmt.ColumnText(0),
+				Name:     stmt.ColumnText(1),
+				RealName: stmt.ColumnText(2),
+			}
+			if user.Email == "" && user.Name == "" && user.RealName == "" {
+				log.Printf("Empty user detected: %+v", user)
+			} else {
+				users = append(users, user)
+			}
+			return nil
+		},
 	}
 
+	// Execute distinct query on the bugs table to retrieve unique user data
 	err := sqlitex.ExecuteTransient(db.Conn, db.QDistinctUsers, execOptions)
-	util.CheckFatal("Failed to execute query", err)
+	if err != nil {
+		return nil, err
+	}
+
+	return users, nil
+
 }
 
 func (db *DB) InsertBug(bug bugzilla.Bug) error {

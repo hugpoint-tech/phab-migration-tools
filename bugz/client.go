@@ -229,22 +229,9 @@ func extractIDs(bug Bug) map[int]User {
 }
 
 func (bc *BugzClient) DownloadBugzillaUsers() error {
-	var users []User
 
-	// Execute distinct query on the bugs table to retrieve unique user data
-	bc.DB.GetDistinctUsers(func(stmt *sqlite.Stmt) error {
-		user := User{
-			Email:    stmt.ColumnText(0),
-			Name:     stmt.ColumnText(1),
-			RealName: stmt.ColumnText(2),
-		}
-		if user.Email == "" && user.Name == "" && user.RealName == "" {
-			log.Printf("Empty user detected: %+v", user)
-		} else {
-			users = append(users, user)
-		}
-		return nil
-	})
+	users, err := bc.DB.GetDistinctUsers()
+	util.CheckFatal("failed to download bugzilla users", err)
 
 	// Debug: Print all retrieved users
 	for _, user := range users {

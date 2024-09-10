@@ -2,16 +2,14 @@ package database
 
 import (
 	"fmt"
+	"hugpoint.tech/freebsd/forge/common/bugzilla"
 	"testing"
 	"zombiezen.com/go/sqlite/sqlitex"
 )
 
 func TestCreateAndInitializeDatabase(t *testing.T) {
-	db, err := CreateAndInitializeDatabase(":memory:")
-	if err != nil {
-		t.Fatalf("Failed to create and initialize database: %v", err)
-	}
-	defer db.Close()
+	db := New(":memory:")
+	defer db.Conn.Close()
 
 	// Define the execOptions for the insert query
 	execOptions := sqlitex.ExecOptions{
@@ -23,7 +21,7 @@ func TestCreateAndInitializeDatabase(t *testing.T) {
 		t.Fatalf("Failed to read insert query: %v", err)
 	}
 
-	if err := sqlitex.ExecuteTransient(db, string(insertQuery), &execOptions); err != nil {
+	if err := sqlitex.ExecuteTransient(db.Conn, string(insertQuery), &execOptions); err != nil {
 		t.Fatalf("Error executing insert statement: %v", err)
 	}
 
@@ -33,7 +31,7 @@ func TestCreateAndInitializeDatabase(t *testing.T) {
 		t.Fatalf("Failed to read select query: %v", err)
 	}
 
-	stmt, err := db.Prepare(string(selectQuery))
+	stmt, err := db.Conn.Prepare(string(selectQuery))
 
 	if err != nil {
 		t.Fatalf("Failed to prepare select statement: %v", err)
@@ -61,11 +59,8 @@ func TestCreateAndInitializeDatabase(t *testing.T) {
 }
 
 func TestGetDistinctUsers(t *testing.T) {
-	db, err := CreateAndInitializeDatabase(":memory:")
-	if err != nil {
-		t.Fatalf("Failed to create and initialize database: %v", err)
-	}
-	defer db.Close()
+	db := New(":memory:")
+	defer db.Conn.Close()
 
 	// Insert sample data
 	sampleData := [][]interface{}{
@@ -80,34 +75,34 @@ func TestGetDistinctUsers(t *testing.T) {
 	}
 
 	for _, args := range sampleData {
-		if err := sqlitex.ExecuteTransient(db, string(insertQuery), &sqlitex.ExecOptions{Args: args}); err != nil {
+		if err := sqlitex.ExecuteTransient(db.Conn, string(insertQuery), &sqlitex.ExecOptions{Args: args}); err != nil {
 			t.Fatalf("Error executing insert statement: %v", err)
 		}
 	}
 
-	users, err := GetDistinctUsers(db)
+	users, err := db.GetDistinctUsers()
 	if err != nil {
-		t.Fatalf("Failed to get distinct users: %v", err)
+		t.Fatal(err)
 	}
 
-	expectedUsers := []User{
+	expectedUsers := []bugzilla.User{
 		{Email: "jane.alive@example.com", Name: "Jane Alive", RealName: "Jane Alive"},
 		{Email: "john.doe@example.com", Name: "John Doe", RealName: "John Doe"},
 	}
 
 	// Create a map of expected users for quick lookup
-	expectedUserMap := make(map[string]User)
+	expectedUserMap := make(map[string]bugzilla.User)
 	for _, u := range expectedUsers {
 		expectedUserMap[u.Email] = u
 	}
 
 	// Function to compare two User structs
-	compareUsers := func(a, b User) bool {
+	compareUsers := func(a, b bugzilla.User) bool {
 		return a.Email == b.Email && a.Name == b.Name && a.RealName == b.RealName
 	}
 
 	// Convert users to a map for easy comparison
-	retrievedUserMap := make(map[string]User)
+	retrievedUserMap := make(map[string]bugzilla.User)
 	for _, user := range users {
 		retrievedUserMap[user.Email] = user
 	}
