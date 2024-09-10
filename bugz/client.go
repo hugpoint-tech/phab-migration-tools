@@ -28,7 +28,7 @@ type BugzLoginResponse struct {
 	Token string `json:"token"`
 }
 
-func NewBugzClient(db *database.DB) (*BugzClient, error) {
+func NewBugzClient(db *database.DB) *BugzClient {
 	login := os.Getenv("BUGZILLA_LOGIN") //Retrieve env var values and check if they are empty
 	password := os.Getenv("BUGZILLA_PASSWORD")
 	if login == "" || password == "" {
@@ -47,26 +47,24 @@ func NewBugzClient(db *database.DB) (*BugzClient, error) {
 	formData.Set("password", password)
 
 	response, err := bc.http.Get(bc.URL + "/login?" + formData.Encode())
-	if err != nil {
-		fmt.Printf("login and/or password incorrect")
-	}
+	util.CheckFatal("login and/or password incorrect", err)
+
 	defer response.Body.Close()
 
 	if response.StatusCode != http.StatusOK {
-		fmt.Printf("login failed, status code: %d", response.StatusCode)
+		util.Fatalf("login failed, status code: %d", response.StatusCode)
 	}
 
 	var loginResponse BugzLoginResponse
-	if err := json.NewDecoder(response.Body).Decode(&loginResponse); err != nil {
-		fmt.Printf("error reading bugzilla login response body: %s", err)
-	}
+	err = json.NewDecoder(response.Body).Decode(&loginResponse)
+	util.CheckFatal("error reading bugzilla login response body", err)
 
 	if loginResponse.Token == "" {
-		fmt.Printf("login token is empty")
+		util.Fatal("login token is empty")
 	}
 	bc.token = loginResponse.Token
 
-	return bc, nil
+	return bc
 }
 
 func (bc *BugzClient) InsertBug(bug Bug) error {
