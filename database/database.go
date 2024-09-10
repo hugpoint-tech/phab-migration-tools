@@ -64,3 +64,18 @@ func (db *DB) GetDistinctUsers(resultFunc func(stmt *sqlite.Stmt) error) {
 	err := sqlitex.ExecuteTransient(db.Conn, db.QDistinctUsers, execOptions)
 	util.CheckFatal("Failed to execute query", err)
 }
+
+func (db *DB) InsertBug(id int, ctime, creator, json string) error {
+	execOptions := sqlitex.ExecOptions{
+		Args: []interface{}{
+			id,
+			ctime,
+			creator,
+			json,
+		},
+	}
+
+	err := sqlitex.ExecuteTransient(db.Conn, db.QInsertBug, &execOptions)
+	util.CheckFatal("error executing insert bug statement", err)
+	return nil
+}

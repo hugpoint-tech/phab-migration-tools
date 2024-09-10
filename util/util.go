@@ -16,7 +16,7 @@ func Fatalf(format string, args ...any) {
 	os.Exit(1)
 }
 
-func CheckFatal(msg string, e error) {
+func CheckFatal(msg string, e error, args ...any) {
 	if e != nil {
 		_, _ = fmt.Fprintf(os.Stderr, "fatal: %s %s\n", msg, e)
 		os.Exit(1)

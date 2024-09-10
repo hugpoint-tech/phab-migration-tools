@@ -67,25 +67,6 @@ func NewBugzClient(db *database.DB) *BugzClient {
 	return bc
 }
 
-func (bc *BugzClient) InsertBug(bug Bug) error {
-	bugJSON, err := json.Marshal(bug)
-	util.CheckFatal("error marshalling bug JSON", err)
-
-	execOptions := sqlitex.ExecOptions{
-		Args: []interface{}{
-			bug.ID,
-			bug.CreationTime,
-			bug.Creator,
-			string(bugJSON),
-		},
-	}
-
-	err = sqlitex.ExecuteTransient(bc.DB.Conn, bc.DB.QInsertBug, &execOptions)
-	util.CheckFatal("error executing insert bug statement", err)
-
-	return nil
-}
-
 // DownloadBugzillaBugs downloads all bugs from the Bugzilla API and saves them to individual JSON files.
 func (bc *BugzClient) DownloadBugzillaBugs() error { // Make URL to bugs
 	apiURL := bc.URL + "/bug"
@@ -132,9 +113,11 @@ func (bc *BugzClient) DownloadBugzillaBugs() error { // Make URL to bugs
 		}
 
 		for _, bug := range bugsResponse["bugs"] {
-			if err := bc.InsertBug(bug); err != nil {
-				return fmt.Errorf("error inserting bug %d: %v", bug.ID, err)
-			}
+			bugJson, err := json.Marshal(bug)
+			util.CheckFatal("error marshalling bug JSON", err)
+
+			err = bc.DB.InsertBug(bug.ID, bug.CreationTime, bug.Creator, string(bugJson))
+			util.CheckFatal(fmt.Sprintf("error inserting bug %d", bug.ID), err)
 		}
 
 		// Update the total number of bugs downloaded
