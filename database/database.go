@@ -3,6 +3,7 @@ package database
 import (
 	"embed"
 	"encoding/json"
+	"fmt"
 	"hugpoint.tech/freebsd/forge/common/bugzilla"
 	"hugpoint.tech/freebsd/forge/util"
 	"log"
@@ -87,7 +88,7 @@ func (db *DB) GetDistinctUsers() ([]bugzilla.User, error) {
 
 }
 
-func (db *DB) InsertBug(bug bugzilla.Bug) error {
+func (db *DB) InsertBug(bug bugzilla.Bug) {
 	bugJson, err := json.Marshal(bug)
 	util.CheckFatal("error marshalling bug JSON", err)
 
@@ -101,6 +102,20 @@ func (db *DB) InsertBug(bug bugzilla.Bug) error {
 	}
 
 	err = sqlitex.ExecuteTransient(db.Conn, db.QInsertBug, &execOptions)
-	util.CheckFatal("error executing insert bug statement", err)
-	return nil
+	util.CheckFatal(fmt.Sprintf("error inserting bug %d", bug.ID), err)
+}
+
+func (db *DB) InsertComment(comment bugzilla.Comment) {
+
+	execOptions := sqlitex.ExecOptions{
+		Args: []interface{}{
+			comment.ID,
+			comment.BugID,
+			comment.AttachmentID,
+			comment.CreationTime,
+			comment.Creator,
+			comment.Text},
+	}
+	err := sqlitex.Execute(db.Conn, db.QInsertComments, &execOptions)
+	util.CheckFatal("error inserting comment", err)
 }

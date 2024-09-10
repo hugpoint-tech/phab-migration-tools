@@ -114,8 +114,7 @@ func (bc *BugzClient) DownloadBugzillaBugs() error { // Make URL to bugs
 		}
 
 		for _, bug := range bugsResponse["bugs"] {
-			err = bc.DB.InsertBug(bug)
-			util.CheckFatal(fmt.Sprintf("error inserting bug %d", bug.ID), err)
+			bc.DB.InsertBug(bug)
 		}
 
 		// Update the total number of bugs downloaded
@@ -279,18 +278,7 @@ func (bc *BugzClient) DownloadBugzillaComments(bugID int64) error {
 	comments := commentsResponse.Bugs[int(bugID)].Comments
 	commentCount := 0
 	for _, comment := range comments {
-		execOptions := sqlitex.ExecOptions{
-			Args: []interface{}{
-				comment.ID,
-				comment.BugID,
-				comment.AttachmentID,
-				comment.CreationTime,
-				comment.Creator,
-				comment.Text},
-		}
-		if err := sqlitex.Execute(bc.DB.Conn, bc.DB.QInsertComments, &execOptions); err != nil {
-			return fmt.Errorf("error inserting comment: %v", err)
-		}
+		bc.DB.InsertComment(comment)
 		commentCount++
 	}
 	fmt.Printf("Downloaded %d comments for bug %d\n", commentCount, bugID)
