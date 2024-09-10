@@ -1,4 +1,4 @@
-package bugz
+package bugzilla
 
 // Bug represents bug data
 type Bug struct {

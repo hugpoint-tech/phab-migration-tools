@@ -2,6 +2,8 @@ package database
 
 import (
 	"embed"
+	"encoding/json"
+	"hugpoint.tech/freebsd/forge/common/bugzilla"
 	"hugpoint.tech/freebsd/forge/util"
 	"zombiezen.com/go/sqlite"
 	"zombiezen.com/go/sqlite/sqlitex"
@@ -65,17 +67,20 @@ func (db *DB) GetDistinctUsers(resultFunc func(stmt *sqlite.Stmt) error) {
 	util.CheckFatal("Failed to execute query", err)
 }
 
-func (db *DB) InsertBug(id int, ctime, creator, json string) error {
+func (db *DB) InsertBug(bug bugzilla.Bug) error {
+	bugJson, err := json.Marshal(bug)
+	util.CheckFatal("error marshalling bug JSON", err)
+
 	execOptions := sqlitex.ExecOptions{
 		Args: []interface{}{
-			id,
-			ctime,
-			creator,
-			json,
+			bug.ID,
+			bug.CreationTime,
+			bug.Creator,
+			string(bugJson),
 		},
 	}
 
-	err := sqlitex.ExecuteTransient(db.Conn, db.QInsertBug, &execOptions)
+	err = sqlitex.ExecuteTransient(db.Conn, db.QInsertBug, &execOptions)
 	util.CheckFatal("error executing insert bug statement", err)
 	return nil
 }

@@ -3,6 +3,7 @@ package bugz
 import (
 	"encoding/json"
 	"fmt"
+	. "hugpoint.tech/freebsd/forge/common/bugzilla"
 	"hugpoint.tech/freebsd/forge/database"
 	"hugpoint.tech/freebsd/forge/util"
 	"io"
@@ -113,10 +114,7 @@ func (bc *BugzClient) DownloadBugzillaBugs() error { // Make URL to bugs
 		}
 
 		for _, bug := range bugsResponse["bugs"] {
-			bugJson, err := json.Marshal(bug)
-			util.CheckFatal("error marshalling bug JSON", err)
-
-			err = bc.DB.InsertBug(bug.ID, bug.CreationTime, bug.Creator, string(bugJson))
+			err = bc.DB.InsertBug(bug)
 			util.CheckFatal(fmt.Sprintf("error inserting bug %d", bug.ID), err)
 		}
 
