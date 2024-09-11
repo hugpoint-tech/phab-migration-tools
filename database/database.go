@@ -18,6 +18,7 @@ type DB struct {
 	Conn *sqlite.Conn
 
 	QInsertBug         string
+	QSelectBugs        string
 	QInsertComments    string
 	QInsertUsers       string
 	QInsertAttachments string
@@ -39,6 +40,10 @@ func New(path string) DB {
 	sql, err = schemaFS.ReadFile("insert.sql")
 	util.CheckFatal("failed to read embedded file", err)
 	result.QInsertBug = string(sql)
+
+	sql, err = schemaFS.ReadFile("select_all_bugs.sql")
+	util.CheckFatal("failed to read embedded file", err)
+	result.QSelectBugs = string(sql)
 
 	sql, err = schemaFS.ReadFile("distinct.sql")
 	util.CheckFatal("failed to read embedded file", err)
@@ -118,4 +123,21 @@ func (db *DB) InsertComment(comment bugzilla.Comment) {
 	}
 	err := sqlitex.Execute(db.Conn, db.QInsertComments, &execOptions)
 	util.CheckFatal("error inserting comment", err)
+}
+
+func (db *DB) ForEachBug(pred func(b bugzilla.Bug) error) error {
+	opts := sqlitex.ExecOptions{
+		ResultFunc: func(stmt *sqlite.Stmt) error {
+			txt := stmt.ColumnText(0)
+			var bug bugzilla.Bug
+			err := json.Unmarshal([]byte(txt), &bug)
+			if err != nil {
+				return err
+			}
+			return pred(bug)
+		},
+		Args: make([]any, 0),
+	}
+
+	return sqlitex.Execute(db.Conn, db.QSelectBugs, &opts)
 }

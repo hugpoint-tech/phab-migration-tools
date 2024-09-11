@@ -3,8 +3,10 @@ package main
 import (
 	"fmt"
 	. "hugpoint.tech/freebsd/forge/bugz"
+	"hugpoint.tech/freebsd/forge/common/bugzilla"
 	"hugpoint.tech/freebsd/forge/database"
 	giteacustom "hugpoint.tech/freebsd/forge/gitea"
+	"hugpoint.tech/freebsd/forge/util"
 	"log"
 	"os"
 )
@@ -42,32 +44,38 @@ func main() {
 		}
 	case "bugzilla-download-comments":
 		// Fetch bugs from the SQLite database
-		bugs, err := ListBugs(db.Conn)
-		if err != nil {
-			log.Fatalf("Error fetching bugs: %v", err)
-		}
-		// Download comments for each bug
-		for _, bug := range bugs {
-			err := bc.DownloadBugzillaComments(int64(bug.ID))
-			if err != nil {
-				fmt.Printf("Error downloading comments for bug %d: %v", bug.ID, err)
-			}
-		}
-		fmt.Println("Downloaded comments for all bugs successfully.")
+		err := db.ForEachBug(func(bug bugzilla.Bug) error {
+			fmt.Println("Downloading comments for", bug.ID)
+			return nil
+		})
+		util.CheckFatal("failed to download comments", err)
+
+		//bugs, err := ListBugs(db.Conn)
+		//if err != nil {
+		//	log.Fatalf("Error fetching bugs: %v", err)
+		//}
+		//// Download comments for each bug
+		//for _, bug := range bugs {
+		//	err := bc.DownloadBugzillaComments(int64(bug.ID))
+		//	if err != nil {
+		//		fmt.Printf("Error downloading comments for bug %d: %v", bug.ID, err)
+		//	}
+		//}
+		//fmt.Println("Downloaded comments for all bugs successfully.")
 	case "bugzilla-download-attachments":
 		// Fetch bugs from the SQLite database
-		bugs, err := ListBugs(db.Conn)
-		if err != nil {
-			log.Fatalf("Error fetching bugs: %v", err)
-		}
-		// Download attachments for each bug
-		for _, bug := range bugs {
-			err := bc.DownloadBugzillaAttachments(int64(bug.ID))
-			if err != nil {
-				fmt.Printf("Error downloading attachments for bug %d: %v", bug.ID, err)
-			}
-		}
-		fmt.Println("Downloaded attachments for all bugs successfully.")
+		//bugs, err := ListBugs(db.Conn)
+		//if err != nil {
+		//	log.Fatalf("Error fetching bugs: %v", err)
+		//}
+		//// Download attachments for each bug
+		//for _, bug := range bugs {
+		//	err := bc.DownloadBugzillaAttachments(int64(bug.ID))
+		//	if err != nil {
+		//		fmt.Printf("Error downloading attachments for bug %d: %v", bug.ID, err)
+		//	}
+		//}
+		//fmt.Println("Downloaded attachments for all bugs successfully.")
 	case "gitea-upload-bugs":
 
 		var url string

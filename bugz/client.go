@@ -13,7 +13,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"zombiezen.com/go/sqlite"
 	"zombiezen.com/go/sqlite/sqlitex"
 )
 
@@ -71,12 +70,6 @@ func NewBugzClient(db *database.DB) *BugzClient {
 // DownloadBugzillaBugs downloads all bugs from the Bugzilla API and saves them to individual JSON files.
 func (bc *BugzClient) DownloadBugzillaBugs() error { // Make URL to bugs
 	apiURL := bc.URL + "/bug"
-
-	// Create a 'bugs' folder if it doesn't exist
-	err := os.MkdirAll("bugs", os.ModePerm)
-	if err != nil && !os.IsExist(err) {
-		return fmt.Errorf("error creating 'users' folder: %v", err)
-	}
 
 	// Specify the pagination parameters
 	pageSize := 1000
@@ -309,8 +302,6 @@ func (bc *BugzClient) DownloadBugzillaAttachments(bugID int64) error {
 
 	attachments := attachmentsResponse.Bugs[int(bugID)]
 
-	// Read the insert query from the embedded file
-
 	attachmentsCount := 0
 	for _, attachment := range attachments {
 		execOptions := sqlitex.ExecOptions{
@@ -329,25 +320,4 @@ func (bc *BugzClient) DownloadBugzillaAttachments(bugID int64) error {
 	}
 	fmt.Printf("Downloaded %d attachments for bug %d\n", attachmentsCount, bugID)
 	return nil
-}
-
-func ListBugs(db *sqlite.Conn) ([]Bug, error) {
-	var bugs []Bug
-	query := "SELECT id FROM bugs"
-	stmt := db.Prep(query)
-	defer stmt.Finalize()
-
-	for {
-		hasNext, err := stmt.Step()
-		if err != nil {
-			return nil, fmt.Errorf("error fetching bugs: %v", err)
-		}
-		if !hasNext {
-			break
-		}
-		bugID := stmt.ColumnInt64(0)
-		bugs = append(bugs, Bug{ID: int(bugID)})
-	}
-
-	return bugs, nil
 }
