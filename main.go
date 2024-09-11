@@ -55,6 +55,7 @@ func main() {
 			return nil
 		})
 		util.CheckFatal("failed to download comments", err)
+
 	case "bugzilla-download-attachments":
 		// Fetch bugs from the SQLite database
 		//bugs, err := ListBugs(db.Conn)
