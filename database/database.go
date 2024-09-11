@@ -110,7 +110,7 @@ func (db *DB) InsertBug(bug bugzilla.Bug) {
 	util.CheckFatal(fmt.Sprintf("error inserting bug %d", bug.ID), err)
 }
 
-func (db *DB) InsertComment(comment bugzilla.Comment) {
+func (db *DB) InsertComment(comment bugzilla.Comment) error {
 
 	execOptions := sqlitex.ExecOptions{
 		Args: []interface{}{
@@ -121,8 +121,40 @@ func (db *DB) InsertComment(comment bugzilla.Comment) {
 			comment.Creator,
 			comment.Text},
 	}
+	// Try inserting the comment into the database
 	err := sqlitex.Execute(db.Conn, db.QInsertComments, &execOptions)
-	util.CheckFatal("error inserting comment", err)
+	if err != nil {
+		util.CheckFatal("error inserting comment", err)
+	}
+	return nil
+}
+
+func (db *DB) GetAllBugIDs() ([]int64, error) {
+	var bugIDs []int64
+	query := `SELECT id FROM bugs`
+
+	// Prepare a statement
+	stmt, err := db.Conn.Prepare(query)
+	if err != nil {
+		return nil, fmt.Errorf("error preparing statement: %v", err)
+	}
+	defer stmt.Finalize()
+
+	// Execute the query and fetch bug IDs
+	for {
+		hasRow, err := stmt.Step()
+		if err != nil {
+			return nil, fmt.Errorf("error stepping through result: %v", err)
+		}
+		if !hasRow {
+			break
+		}
+
+		bugID := stmt.ColumnInt64(0)
+		bugIDs = append(bugIDs, bugID)
+	}
+
+	return bugIDs, nil
 }
 
 func (db *DB) ForEachBug(pred func(b bugzilla.Bug) error) error {

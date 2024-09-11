@@ -246,7 +246,7 @@ func (bc *BugzClient) DownloadBugzillaUsers() error {
 	return nil
 }
 
-func (bc *BugzClient) DownloadBugzillaComments(bugID int64) error {
+func (bc *BugzClient) DownloadBugzillaComments(bugID int64) ([]Comment, error) {
 	apiURL := fmt.Sprintf("%s/bug/%d/comment", bc.URL, bugID)
 	params := url.Values{}
 	params.Set("token", bc.token)
@@ -254,28 +254,33 @@ func (bc *BugzClient) DownloadBugzillaComments(bugID int64) error {
 	fullURL := apiURL + "?" + params.Encode()
 	response, err := bc.http.Get(fullURL)
 	if err != nil {
-		return fmt.Errorf("error making GET request to %s: %v", fullURL, err)
+		return nil, fmt.Errorf("error making GET request to %s: %v", fullURL, err)
 	}
 	defer response.Body.Close()
 
 	body, err := io.ReadAll(response.Body)
 	if err != nil {
-		return fmt.Errorf("error reading response body from %s: %v", fullURL, err)
+		return nil, fmt.Errorf("error reading response body from %s: %v", fullURL, err)
 	}
 
 	var commentsResponse CommentsResponse
 	if err := json.Unmarshal(body, &commentsResponse); err != nil {
-		return fmt.Errorf("error decoding JSON: %v", err)
+		return nil, fmt.Errorf("error decoding JSON: %v", err)
 	}
 
 	comments := commentsResponse.Bugs[int(bugID)].Comments
 	commentCount := 0
 	for _, comment := range comments {
-		bc.DB.InsertComment(comment)
+		err := bc.DB.InsertComment(comment)
+		if err != nil {
+			log.Printf("Error inserting comment for bug %d, comment ID %d: %v", comment.BugID, comment.ID, err)
+			continue
+		}
 		commentCount++
 	}
+
 	fmt.Printf("Downloaded %d comments for bug %d\n", commentCount, bugID)
-	return nil
+	return nil, nil
 }
 
 func (bc *BugzClient) DownloadBugzillaAttachments(bugID int64) error {
