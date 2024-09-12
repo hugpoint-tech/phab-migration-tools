@@ -44,7 +44,6 @@ func main() {
 		}
 	case "bugzilla-download-comments":
 		// Fetch bugs from the SQLite database
-
 		err := db.ForEachBug(func(bug bugzilla.Bug) error {
 			fmt.Println("Downloading comments for", bug.ID)
 			return nil
@@ -63,6 +62,7 @@ func main() {
 		//	}
 		//}
 		//fmt.Println("Downloaded comments for all bugs successfully.")
+
 	case "bugzilla-download-attachments":
 		// Fetch bugs from the SQLite database
 		//bugs, err := ListBugs(db.Conn)

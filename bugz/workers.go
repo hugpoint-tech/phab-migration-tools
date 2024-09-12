@@ -2,7 +2,7 @@ package bugz
 
 import (
 	. "hugpoint.tech/freebsd/forge/database"
-	"log"
+	"hugpoint.tech/freebsd/forge/util"
 )
 
 type CommentDownloadWorker struct {
@@ -22,16 +22,11 @@ func (worker *CommentDownloadWorker) downloadComment() {
 			break
 		}
 
-		// Get comments from the Bugzilla API using the bugID
-		comments, err := worker.Client.DownloadBugzillaComments(bugID)
+		// Download and insert comments directly
+		_, err := worker.Client.DownloadBugzillaComments(bugID)
 		if err != nil {
-			log.Printf("Error downloading comments for bug %d: %v", bugID, err)
+			util.Fatalf("Error downloading comments for bug %d: %v", bugID, err)
 			continue
-		}
-
-		// Insert each comment into the database
-		for _, comment := range comments {
-			worker.DB.InsertComment(comment)
 		}
 	}
 }
