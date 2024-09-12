@@ -32,14 +32,14 @@ func (worker *CommentDownloadWorker) downloadComment() {
 }
 
 func (bc *BugzClient) downloadAllComments() {
-	// Create a channel to send bugIDs for workers to process
-	work := make(chan int64)
+	// Create a buffered channel to send bugIDs for workers to process
+	work := make(chan int64, 100) // Use a buffered channel to avoid blocking the sender
 
 	// Create a slice to store worker objects
 	var workersPool []CommentDownloadWorker
 
 	// Create a pool of workers
-	maxWorkers := 10
+	maxWorkers := 50 // Increase the number of workers for faster parallel processing
 	for workerNum := 0; workerNum < maxWorkers; workerNum++ {
 		worker := CommentDownloadWorker{
 			BugIDChan: work,
@@ -65,6 +65,7 @@ func (bc *BugzClient) downloadAllComments() {
 
 	// Close the work channel to signal no more work
 	close(work)
+
 }
 
 type AttachmentDownloadWorker struct {
