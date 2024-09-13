@@ -1,8 +1,10 @@
 package bugz
 
 import (
+	"fmt"
 	. "hugpoint.tech/freebsd/forge/database"
 	"hugpoint.tech/freebsd/forge/util"
+	"sync"
 )
 
 type CommentDownloadWorker struct {
@@ -38,21 +40,28 @@ func (bc *BugzClient) downloadAllComments() {
 	// Create a slice to store worker objects
 	var workersPool []CommentDownloadWorker
 
-	// Create a pool of workers
-	maxWorkers := 50 // Increase the number of workers for faster parallel processing
+	// Create a WaitGroup to track the worker completion
+	var wg sync.WaitGroup
+
+	maxWorkers := 10
 	for workerNum := 0; workerNum < maxWorkers; workerNum++ {
 		worker := CommentDownloadWorker{
 			BugIDChan: work,
 			Client:    bc,    // Pass Bugzilla client reference
 			DB:        bc.DB, // Pass database reference
 		}
+
 		// Add the worker to the pool
 		workersPool = append(workersPool, worker)
-	}
 
-	// Launch workers in separate goroutines
-	for _, worker := range workersPool {
-		go worker.downloadComment() // Start downloading comments in goroutines
+		// Increment the WaitGroup counter
+		wg.Add(1)
+
+		// Launch workers in separate goroutines
+		go func(w CommentDownloadWorker) {
+			defer wg.Done()     // Ensure WaitGroup is decremented when worker finishes
+			w.downloadComment() // Start downloading comments in goroutines
+		}(worker)
 	}
 
 	// Fetch all bug IDs that need comment downloads from the database
@@ -66,6 +75,10 @@ func (bc *BugzClient) downloadAllComments() {
 	// Close the work channel to signal no more work
 	close(work)
 
+	// Wait for all workers to finish
+	wg.Wait()
+
+	fmt.Println("All comments downloaded successfully.")
 }
 
 type AttachmentDownloadWorker struct {
