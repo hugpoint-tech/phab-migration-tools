@@ -7,6 +7,7 @@ import (
 	"hugpoint.tech/freebsd/forge/common/bugzilla"
 	"hugpoint.tech/freebsd/forge/util"
 	"log"
+	"sync"
 	"zombiezen.com/go/sqlite"
 	"zombiezen.com/go/sqlite/sqlitex"
 )
@@ -23,12 +24,13 @@ type DB struct {
 	QInsertUsers       string
 	QInsertAttachments string
 	QDistinctUsers     string
+	Mutex              sync.Mutex // Declare mutex for thread-safe inserts
 }
 
-func New(path string) DB {
+func New(path string) *DB { // Return a pointer to DB
 	var err error
 	var sql []byte
-	var result DB
+	result := &DB{} // Create DB as a pointer
 
 	result.Conn, err = sqlite.OpenConn(path, 0)
 	util.CheckFatal("error opening database", err)
@@ -61,7 +63,7 @@ func New(path string) DB {
 	util.CheckFatal("failed to read embedded file", err)
 	result.QInsertAttachments = string(sql)
 
-	return result
+	return result // Return the pointer to DB
 }
 
 func (db *DB) GetDistinctUsers() ([]bugzilla.User, error) {
@@ -111,6 +113,8 @@ func (db *DB) InsertBug(bug bugzilla.Bug) {
 }
 
 func (db *DB) InsertComment(comment bugzilla.Comment) error {
+	db.Mutex.Lock()         // Lock the mutex to prevent race conditions
+	defer db.Mutex.Unlock() // Ensure mutex is unlocked after the operation
 
 	execOptions := sqlitex.ExecOptions{
 		Args: []interface{}{
@@ -119,13 +123,16 @@ func (db *DB) InsertComment(comment bugzilla.Comment) error {
 			comment.AttachmentID,
 			comment.CreationTime,
 			comment.Creator,
-			comment.Text},
+			comment.Text,
+		},
 	}
+
 	// Try inserting the comment into the database
 	err := sqlitex.Execute(db.Conn, db.QInsertComments, &execOptions)
 	if err != nil {
-		util.CheckFatal("error inserting comment", err)
+		return fmt.Errorf("error inserting comment: %v", err)
 	}
+
 	return nil
 }
 

@@ -39,7 +39,7 @@ func (bc *BugzClient) downloadAllComments() {
 	// Create a WaitGroup to track the worker completion
 	var wg sync.WaitGroup
 
-	maxWorkers := 10
+	maxWorkers := 20
 	for workerNum := 0; workerNum < maxWorkers; workerNum++ {
 		worker := CommentDownloadWorker{
 			BugIDChan: work,

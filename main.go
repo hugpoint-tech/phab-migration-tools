@@ -18,7 +18,7 @@ func main() {
 	}
 	command := os.Args[1]
 	db := database.New("migrator.db")
-	bc := NewBugzClient(&db) // Create a BugzClient instance
+	bc := NewBugzClient(db) // Create a BugzClient instance
 
 	switch command {
 	case "bugzilla-download-bugs":
