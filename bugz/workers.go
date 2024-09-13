@@ -3,7 +3,6 @@ package bugz
 import (
 	"fmt"
 	. "hugpoint.tech/freebsd/forge/database"
-	"hugpoint.tech/freebsd/forge/util"
 	"sync"
 )
 
@@ -27,7 +26,7 @@ func (worker *CommentDownloadWorker) downloadComment() {
 		// Download and insert comments directly
 		_, err := worker.Client.DownloadBugzillaComments(bugID)
 		if err != nil {
-			util.Fatalf("Error downloading comments for bug %d: %v", bugID, err)
+			fmt.Printf("Error downloading comments for bug %d: %v", bugID, err)
 			continue
 		}
 	}
@@ -36,9 +35,6 @@ func (worker *CommentDownloadWorker) downloadComment() {
 func (bc *BugzClient) downloadAllComments() {
 	// Create a buffered channel to send bugIDs for workers to process
 	work := make(chan int64, 100) // Use a buffered channel to avoid blocking the sender
-
-	// Create a slice to store worker objects
-	var workersPool []CommentDownloadWorker
 
 	// Create a WaitGroup to track the worker completion
 	var wg sync.WaitGroup
@@ -51,9 +47,6 @@ func (bc *BugzClient) downloadAllComments() {
 			DB:        bc.DB, // Pass database reference
 		}
 
-		// Add the worker to the pool
-		workersPool = append(workersPool, worker)
-
 		// Increment the WaitGroup counter
 		wg.Add(1)
 
@@ -65,7 +58,10 @@ func (bc *BugzClient) downloadAllComments() {
 	}
 
 	// Fetch all bug IDs that need comment downloads from the database
-	bugIDs, _ := bc.DB.GetAllBugIDs()
+	bugIDs, err := bc.DB.GetAllBugIDs()
+	if err != nil {
+		fmt.Printf("Error fetching bug IDs: %v", err)
+	}
 
 	// Send each bugID to the workers through the work channel
 	for _, bugID := range bugIDs {
