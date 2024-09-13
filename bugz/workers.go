@@ -34,7 +34,7 @@ func (worker *CommentDownloadWorker) downloadComment() {
 
 func (bc *BugzClient) downloadAllComments() {
 	// Create a buffered channel to send bugIDs for workers to process
-	work := make(chan int64, 100) // Use a buffered channel to avoid blocking the sender
+	work := make(chan int64, 1000) // Use a buffered channel to avoid blocking the sender
 
 	// Create a WaitGroup to track the worker completion
 	var wg sync.WaitGroup
