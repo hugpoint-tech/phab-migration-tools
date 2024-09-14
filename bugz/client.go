@@ -220,32 +220,6 @@ func extractIDs(bug Bug) map[int]User {
 	return idUserMap
 }
 
-func (bc *BugzClient) DownloadBugzillaUsers() error {
-
-	users, err := bc.DB.GetDistinctUsers()
-	util.CheckFatal("failed to download bugzilla users", err)
-
-	// Debug: Print all retrieved users
-	for _, user := range users {
-		fmt.Printf("Retrieved user: %+v\n", user)
-	}
-
-	userCount := 0
-	// Insert each user into the users table
-	for _, user := range users {
-		execOptions := sqlitex.ExecOptions{
-			Args: []interface{}{user.Email, user.Name, user.RealName},
-		}
-
-		if err := sqlitex.Execute(bc.DB.Conn, bc.DB.QInsertUsers, &execOptions); err != nil {
-			return fmt.Errorf("error inserting user: %v", err)
-		}
-		userCount++
-	}
-	fmt.Printf("Downloaded %d unique users\n", userCount)
-	return nil
-}
-
 func (bc *BugzClient) DownloadBugzillaComments(bugID int64) (int, error) {
 	if bc.DB == nil || bc.DB.Conn == nil {
 		return 0, fmt.Errorf("database connection is not initialized")
