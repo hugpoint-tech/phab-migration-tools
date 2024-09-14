@@ -50,8 +50,7 @@ func New(path string) DB { // Return a pointer to database
 	if conn == nil {
 		util.Fatal("failed to open database connection")
 	}
-	defer conn.Close()
-	util.CheckFatal("error opening database", err)
+	db.pool.Put(conn)
 
 	err = sqlitex.ExecScript(conn, qSchema)
 	util.CheckFatal("error applying schema", err)
@@ -66,7 +65,7 @@ func (db *DB) GetDistinctUsers() ([]bugzilla.User, error) {
 	if conn == nil {
 		util.Fatal("failed to open database connection")
 	}
-	defer conn.Close()
+	defer db.pool.Put(conn)
 
 	execOptions := &sqlitex.ExecOptions{
 		ResultFunc: func(stmt *sqlite.Stmt) error {
@@ -102,7 +101,7 @@ func (db *DB) InsertBug(bug bugzilla.Bug) error {
 	if conn == nil {
 		util.Fatal("failed to open database connection")
 	}
-	defer conn.Close()
+	defer db.pool.Put(conn)
 
 	execOptions := sqlitex.ExecOptions{
 		Args: []interface{}{
@@ -118,10 +117,11 @@ func (db *DB) InsertBug(bug bugzilla.Bug) error {
 
 func (db *DB) InsertComment(comments ...bugzilla.Comment) (err error) {
 	conn := db.pool.Get(context.Background())
+
 	if conn == nil {
 		util.Fatal("failed to open database connection")
 	}
-	defer conn.Close()
+	defer db.pool.Put(conn)
 	var txCommit func(*error)
 
 	txCommit, err = sqlitex.ImmediateTransaction(conn)
@@ -157,7 +157,7 @@ func (db *DB) InsertAttachment(attachment bugzilla.Attachment) error {
 	if conn == nil {
 		util.Fatal("failed to open database connection")
 	}
-	defer conn.Close()
+	defer db.pool.Put(conn)
 
 	execOptions := sqlitex.ExecOptions{
 		Args: []interface{}{
@@ -184,7 +184,7 @@ func (db *DB) ForEachBug(pred func(b bugzilla.Bug) error) error {
 	if conn == nil {
 		util.Fatal("failed to open database connection")
 	}
-	defer conn.Close()
+	defer db.pool.Put(conn)
 
 	opts := sqlitex.ExecOptions{
 		ResultFunc: func(stmt *sqlite.Stmt) error {
@@ -207,7 +207,7 @@ func (db *DB) ForEachUser(pred func(b bugzilla.User) error) error {
 	if conn == nil {
 		util.Fatal("failed to open database connection")
 	}
-	defer conn.Close()
+	defer db.pool.Put(conn)
 
 	opts := sqlitex.ExecOptions{
 		ResultFunc: func(stmt *sqlite.Stmt) error {
