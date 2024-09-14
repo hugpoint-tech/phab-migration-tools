@@ -37,7 +37,7 @@ func embeddedSQL(filename string) string {
 	return string(sql)
 }
 
-func New(path string) DB { // Return a pointer to DB
+func New(path string) DB { // Return a pointer to database
 	var err error
 	var db DB
 
@@ -115,28 +115,36 @@ func (db *DB) InsertBug(bug bugzilla.Bug) error {
 	return sqlitex.ExecuteTransient(conn, qInsertBug, &execOptions)
 }
 
-func (db *DB) InsertComment(comment bugzilla.Comment) error {
+func (db *DB) InsertComment(comments ...bugzilla.Comment) error {
 	conn := db.pool.Get(context.Background())
-	if conn != nil {
+	if conn == nil {
 		util.Fatal("failed to open database connection")
 	}
 	defer conn.Close()
 
-	execOptions := sqlitex.ExecOptions{
-		Args: []interface{}{
-			comment.ID,
-			comment.BugID,
-			comment.AttachmentID,
-			comment.CreationTime,
-			comment.Creator,
-			comment.Text,
-		},
-	}
-
-	// Try inserting the comment into the database
-	err := sqlitex.Execute(conn, qInsertComments, &execOptions)
+	txCommit, err := sqlitex.ImmediateTransaction(conn)
 	if err != nil {
-		return fmt.Errorf("error inserting comment: %v", err)
+		return err
+	}
+	defer txCommit(&err)
+
+	stmt := conn.Prep(qInsertComments)
+	for _, c := range comments {
+		stmt.BindInt64(0, int64(c.ID))
+		stmt.BindInt64(1, int64(c.BugID))
+		stmt.BindInt64(2, int64(c.AttachmentID))
+		stmt.BindText(3, c.CreationTime)
+		stmt.BindText(4, c.Creator)
+		stmt.BindText(5, c.Text)
+
+		_, err = stmt.Step()
+		if err != nil {
+			return err
+		}
+		err = stmt.Reset()
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil

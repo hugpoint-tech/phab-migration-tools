@@ -117,7 +117,7 @@ func (bc *Client) DownloadBugzillaBugs() ([]Bug, error) { // Make URL to bugs
 	return bugs, nil
 }
 
-func (bc *Client) DownloadBugComments(bugID int64) ([]Comment, error) {
+func (bc *Client) DownloadBugComments(bugID int) ([]Comment, error) {
 	apiURL := fmt.Sprintf("%s/bug/%d/comment", bc.URL, bugID)
 	params := url.Values{}
 	params.Set("token", bc.token)
@@ -142,7 +142,7 @@ func (bc *Client) DownloadBugComments(bugID int64) ([]Comment, error) {
 	return commentsResponse.Bugs[int(bugID)].Comments, nil
 }
 
-func (bc *Client) DownloadBugAttachments(bugID int64) ([]Attachment, error) {
+func (bc *Client) DownloadBugAttachments(bugID int) ([]Attachment, error) {
 	apiURL := fmt.Sprintf("%s/bug/%d/attachment", bc.URL, bugID)
 	params := url.Values{}
 	params.Set("token", bc.token)
