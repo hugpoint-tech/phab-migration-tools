@@ -13,14 +13,12 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"zombiezen.com/go/sqlite/sqlitex"
 )
 
 type BugzClient struct {
 	token string
 	URL   string
 	http  *http.Client
-	DB    *database.DB
 }
 
 type BugzLoginResponse struct {
@@ -39,7 +37,6 @@ func NewBugzClient(db *database.DB) *BugzClient {
 		URL:   "https://bugs.freebsd.org/bugzilla/rest",
 		token: "",
 		http:  &http.Client{},
-		DB:    db,
 	}
 
 	formData := url.Values{}
@@ -68,13 +65,16 @@ func NewBugzClient(db *database.DB) *BugzClient {
 }
 
 // DownloadBugzillaBugs downloads all bugs from the Bugzilla API and saves them to individual JSON files.
-func (bc *BugzClient) DownloadBugzillaBugs() error { // Make URL to bugs
+func (bc *BugzClient) DownloadBugzillaBugs() ([]Bug, error) { // Make URL to bugs
 	apiURL := bc.URL + "/bug"
 
 	// Specify the pagination parameters
 	pageSize := 1000
 	pageNumber := 0
-	totalBugs := 0
+
+	// TODO: this is suboptimal - memory consumption will go through the roof.
+	// We need to refactor this function to work like a resumable iterator.
+	bugs := make([]Bug, 0, 200000)
 
 	for {
 		// Create query parameters
@@ -89,13 +89,13 @@ func (bc *BugzClient) DownloadBugzillaBugs() error { // Make URL to bugs
 		// Make a GET request to the API
 		response, err := bc.http.Get(fullURL)
 		if err != nil {
-			return fmt.Errorf("error making GET request to %s: %v", fullURL, err)
+			return nil, fmt.Errorf("error making GET request to %s: %v", fullURL, err)
 		}
 
 		// Read the response body
 		body, err := io.ReadAll(response.Body)
 		if err != nil {
-			return fmt.Errorf("error reading response body from %s: %v", fullURL, err)
+			return nil, fmt.Errorf("error reading response body from %s: %v", fullURL, err)
 		}
 		response.Body.Close()
 
@@ -103,18 +103,10 @@ func (bc *BugzClient) DownloadBugzillaBugs() error { // Make URL to bugs
 		var bugsResponse map[string][]Bug
 		err = json.Unmarshal(body, &bugsResponse)
 		if err != nil {
-			return fmt.Errorf("error decoding JSON: %v", err)
+			return nil, fmt.Errorf("error decoding JSON: %v", err)
 		}
 
-		for _, bug := range bugsResponse["bugs"] {
-			bc.DB.InsertBug(bug)
-		}
-
-		// Update the total number of bugs downloaded
-		totalBugs += len(bugsResponse["bugs"])
-
-		// Print the number of bugs downloaded after each page
-		fmt.Printf("Total bugs downloaded: %d\n", totalBugs)
+		bugs = append(bugs, bugsResponse["bugs"]...)
 
 		// Check if there are more pages
 		if len(bugsResponse["bugs"]) < pageSize {
@@ -125,7 +117,7 @@ func (bc *BugzClient) DownloadBugzillaBugs() error { // Make URL to bugs
 		pageNumber++
 	}
 
-	return nil
+	return bugs, nil
 }
 
 func writeToFile(filename string, bug Bug) error {
@@ -220,48 +212,32 @@ func extractIDs(bug Bug) map[int]User {
 	return idUserMap
 }
 
-func (bc *BugzClient) DownloadBugzillaComments(bugID int64) (int, error) {
-	if bc.DB == nil || bc.DB.Conn == nil {
-		return 0, fmt.Errorf("database connection is not initialized")
-	}
-
+func (bc *BugzClient) DownloadBugComments(bugID int64) ([]Comment, error) {
 	apiURL := fmt.Sprintf("%s/bug/%d/comment", bc.URL, bugID)
 	params := url.Values{}
 	params.Set("token", bc.token)
-
 	fullURL := apiURL + "?" + params.Encode()
 	response, err := bc.http.Get(fullURL)
+
 	if err != nil {
-		return 0, fmt.Errorf("error making GET request to %s: %v", fullURL, err)
+		return nil, fmt.Errorf("error making GET request to %s: %v", fullURL, err)
 	}
 	defer response.Body.Close()
 
 	body, err := io.ReadAll(response.Body)
 	if err != nil {
-		return 0, fmt.Errorf("error reading response body from %s: %v", fullURL, err)
+		return nil, fmt.Errorf("error reading response body from %s: %v", fullURL, err)
 	}
 
 	var commentsResponse CommentsResponse
 	if err := json.Unmarshal(body, &commentsResponse); err != nil {
-		return 0, fmt.Errorf("error decoding JSON: %v", err)
+		return nil, fmt.Errorf("error decoding JSON: %v", err)
 	}
 
-	comments := commentsResponse.Bugs[int(bugID)].Comments
-	commentCount := 0
-	for _, comment := range comments {
-		err := bc.DB.InsertComment(comment)
-		if err != nil {
-			log.Printf("Error inserting comment for bug %d, comment ID %d: %v", comment.BugID, comment.ID, err)
-			continue
-		}
-		commentCount++
-	}
-
-	fmt.Printf("Downloaded %d comments for bug %d\n", commentCount, bugID)
-	return commentCount, nil // Return comment count instead of comments slice
+	return commentsResponse.Bugs[int(bugID)].Comments, nil
 }
 
-func (bc *BugzClient) DownloadBugzillaAttachments(bugID int64) error {
+func (bc *BugzClient) DownloadBugAttachments(bugID int64) ([]Attachment, error) {
 	apiURL := fmt.Sprintf("%s/bug/%d/attachment", bc.URL, bugID)
 	params := url.Values{}
 	params.Set("token", bc.token)
@@ -269,38 +245,19 @@ func (bc *BugzClient) DownloadBugzillaAttachments(bugID int64) error {
 	fullURL := apiURL + "?" + params.Encode()
 	response, err := bc.http.Get(fullURL)
 	if err != nil {
-		return fmt.Errorf("error making GET request to %s: %v", fullURL, err)
+		return nil, fmt.Errorf("error making GET request to %s: %v", fullURL, err)
 	}
 	defer response.Body.Close()
 
 	body, err := io.ReadAll(response.Body)
 	if err != nil {
-		return fmt.Errorf("error reading response body from %s: %v", fullURL, err)
+		return nil, fmt.Errorf("error reading response body from %s: %v", fullURL, err)
 	}
 
 	var attachmentsResponse AttachmentsResponse
 	if err := json.Unmarshal(body, &attachmentsResponse); err != nil {
-		return fmt.Errorf("error decoding JSON: %v", err)
+		return nil, fmt.Errorf("error decoding JSON: %v", err)
 	}
 
-	attachments := attachmentsResponse.Bugs[int(bugID)]
-
-	attachmentsCount := 0
-	for _, attachment := range attachments {
-		execOptions := sqlitex.ExecOptions{
-			Args: []interface{}{
-				attachment.ID,
-				attachment.BugID,
-				attachment.CreationTime,
-				attachment.Creator,
-				attachment.Summary,
-				attachment.Data},
-		}
-		if err := sqlitex.Execute(bc.DB.Conn, bc.DB.QInsertAttachments, &execOptions); err != nil {
-			return fmt.Errorf("error inserting attachment: %v", err)
-		}
-		attachmentsCount++
-	}
-	fmt.Printf("Downloaded %d attachments for bug %d\n", attachmentsCount, bugID)
-	return nil
+	return attachmentsResponse.Bugs[int(bugID)], nil
 }
