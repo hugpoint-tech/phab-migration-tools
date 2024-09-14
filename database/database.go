@@ -143,6 +143,33 @@ func (db *DB) InsertComment(comment bugzilla.Comment) error {
 	return nil
 }
 
+func (db *DB) InsertAttachment(attachment bugzilla.Attachment) error {
+	conn := db.pool.Get(context.Background())
+	if conn != nil {
+		util.Fatal("failed to open database connection")
+	}
+	defer conn.Close()
+
+	execOptions := sqlitex.ExecOptions{
+		Args: []interface{}{
+			attachment.ID,
+			attachment.BugID,
+			attachment.CreationTime,
+			attachment.Creator,
+			attachment.Summary,
+			attachment.Data,
+		},
+	}
+
+	// Try inserting the comment into the database
+	err := sqlitex.Execute(conn, qInsertAttachments, &execOptions)
+	if err != nil {
+		return fmt.Errorf("error inserting attachments: %v", err)
+	}
+
+	return nil
+}
+
 func (db *DB) ForEachBug(pred func(b bugzilla.Bug) error) error {
 	conn := db.pool.Get(context.Background())
 	if conn != nil {
