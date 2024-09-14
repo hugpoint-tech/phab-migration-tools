@@ -7,7 +7,6 @@ CREATE TABLE IF NOT EXISTS bugs (
 
 CREATE TABLE IF NOT EXISTS users (
     Email TEXT PRIMARY KEY,
-    Name TEXT,
     RealName TEXT
 );
 
