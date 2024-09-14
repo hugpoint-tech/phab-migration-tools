@@ -13,19 +13,22 @@ import (
 	"zombiezen.com/go/sqlite/sqlitex"
 )
 
-//go:embed *.sql
-var schemaFS embed.FS
+var (
+	//go:embed *.sql
+	schemaFS embed.FS
+
+	qSchema            = embeddedSQL("schema.sql")
+	qInsertBug         = embeddedSQL("insert.sql")
+	qSelectBugs        = embeddedSQL("select_all_bugs.sql")
+	qSelectUsers       = embeddedSQL("select_all_users.sql")
+	qDistinctUsers     = embeddedSQL("select_distinct_users.sql")
+	qInsertComments    = embeddedSQL("insert_comments.sql")
+	qInsertUsers       = embeddedSQL("insert_user.sql")
+	qInsertAttachments = embeddedSQL("insert_attachments.sql")
+)
 
 type DB struct {
 	pool *sqlitex.Pool
-
-	QInsertBug         string
-	QSelectBugs        string
-	QSelectUsers       string
-	QInsertComments    string
-	QInsertUsers       string
-	QInsertAttachments string
-	QDistinctUsers     string
 }
 
 func embeddedSQL(filename string) string {
@@ -49,19 +52,10 @@ func New(path string) DB { // Return a pointer to DB
 	defer conn.Close()
 	util.CheckFatal("error opening database", err)
 
-	schema := embeddedSQL("schema.sql")
-	err = sqlitex.ExecScript(conn, schema)
+	err = sqlitex.ExecScript(conn, qSchema)
 	util.CheckFatal("error applying schema", err)
 
-	db.QInsertBug = embeddedSQL("insert.sql")
-	db.QSelectBugs = embeddedSQL("select_all_bugs.sql")
-	db.QSelectUsers = embeddedSQL("select_all_users.sql")
-	db.QDistinctUsers = embeddedSQL("select_distinct_users.sql")
-	db.QInsertComments = embeddedSQL("insert_comments.sql")
-	db.QInsertUsers = embeddedSQL("insert_user.sql")
-	db.QInsertAttachments = embeddedSQL("insert_attachments.sql")
-
-	return db // Return the pointer to DB
+	return db
 }
 
 func (db *DB) GetDistinctUsers() ([]bugzilla.User, error) {
@@ -90,7 +84,7 @@ func (db *DB) GetDistinctUsers() ([]bugzilla.User, error) {
 	}
 
 	// Execute distinct query on the bugs table to retrieve unique user data
-	err := sqlitex.ExecuteTransient(conn, db.QDistinctUsers, execOptions)
+	err := sqlitex.ExecuteTransient(conn, qDistinctUsers, execOptions)
 	if err != nil {
 		return nil, err
 	}
@@ -118,7 +112,7 @@ func (db *DB) InsertBug(bug bugzilla.Bug) {
 		},
 	}
 
-	err = sqlitex.ExecuteTransient(conn, db.QInsertBug, &execOptions)
+	err = sqlitex.ExecuteTransient(conn, qInsertBug, &execOptions)
 	util.CheckFatal(fmt.Sprintf("error inserting bug %d", bug.ID), err)
 }
 
@@ -141,7 +135,7 @@ func (db *DB) InsertComment(comment bugzilla.Comment) error {
 	}
 
 	// Try inserting the comment into the database
-	err := sqlitex.Execute(conn, db.QInsertComments, &execOptions)
+	err := sqlitex.Execute(conn, qInsertComments, &execOptions)
 	if err != nil {
 		return fmt.Errorf("error inserting comment: %v", err)
 	}
@@ -169,7 +163,7 @@ func (db *DB) ForEachBug(pred func(b bugzilla.Bug) error) error {
 		Args: make([]any, 0),
 	}
 
-	return sqlitex.Execute(conn, db.QSelectBugs, &opts)
+	return sqlitex.Execute(conn, qSelectBugs, &opts)
 }
 
 func (db *DB) ForEachUser(pred func(b bugzilla.User) error) error {
@@ -190,5 +184,5 @@ func (db *DB) ForEachUser(pred func(b bugzilla.User) error) error {
 		Args: make([]any, 0),
 	}
 
-	return sqlitex.Execute(conn, db.QSelectUsers, &opts)
+	return sqlitex.Execute(conn, qSelectUsers, &opts)
 }
