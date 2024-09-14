@@ -1,6 +1,9 @@
 package bugz
 
-import "testing"
+import (
+	. "hugpoint.tech/freebsd/forge/common/bugzilla"
+	"testing"
+)
 
 func TestExtractIDs(t *testing.T) {
 

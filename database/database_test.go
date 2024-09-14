@@ -1,15 +1,21 @@
 package database
 
 import (
+	"context"
 	"fmt"
 	"hugpoint.tech/freebsd/forge/common/bugzilla"
+	"hugpoint.tech/freebsd/forge/util"
 	"testing"
 	"zombiezen.com/go/sqlite/sqlitex"
 )
 
 func TestCreateAndInitializeDatabase(t *testing.T) {
 	db := New(":memory:")
-	defer db.Conn.Close()
+	conn := db.pool.Get(context.Background())
+	if conn != nil {
+		util.Fatal("failed to open database connection")
+	}
+	defer conn.Close()
 
 	// Define the execOptions for the insert query
 	execOptions := sqlitex.ExecOptions{
@@ -21,7 +27,7 @@ func TestCreateAndInitializeDatabase(t *testing.T) {
 		t.Fatalf("Failed to read insert query: %v", err)
 	}
 
-	if err := sqlitex.ExecuteTransient(db.Conn, string(insertQuery), &execOptions); err != nil {
+	if err := sqlitex.ExecuteTransient(conn, string(insertQuery), &execOptions); err != nil {
 		t.Fatalf("Error executing insert statement: %v", err)
 	}
 
@@ -31,7 +37,7 @@ func TestCreateAndInitializeDatabase(t *testing.T) {
 		t.Fatalf("Failed to read select query: %v", err)
 	}
 
-	stmt, err := db.Conn.Prepare(string(selectQuery))
+	stmt, err := conn.Prepare(string(selectQuery))
 
 	if err != nil {
 		t.Fatalf("Failed to prepare select statement: %v", err)
@@ -60,7 +66,11 @@ func TestCreateAndInitializeDatabase(t *testing.T) {
 
 func TestGetDistinctUsers(t *testing.T) {
 	db := New(":memory:")
-	defer db.Conn.Close()
+	conn := db.pool.Get(context.Background())
+	if conn != nil {
+		util.Fatal("failed to open database connection")
+	}
+	defer conn.Close()
 
 	// Insert sample data
 	sampleData := [][]interface{}{
@@ -75,7 +85,7 @@ func TestGetDistinctUsers(t *testing.T) {
 	}
 
 	for _, args := range sampleData {
-		if err := sqlitex.ExecuteTransient(db.Conn, string(insertQuery), &sqlitex.ExecOptions{Args: args}); err != nil {
+		if err := sqlitex.ExecuteTransient(conn, string(insertQuery), &sqlitex.ExecOptions{Args: args}); err != nil {
 			t.Fatalf("Error executing insert statement: %v", err)
 		}
 	}

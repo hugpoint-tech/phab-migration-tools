@@ -48,23 +48,24 @@ func New(url string) Gitea {
 	}
 }
 
-func (g *Gitea) UploadBugs(bc *sqlite.Conn) {
-
-	stmt, err := prepareStmt(bc)
-	util.CheckFatal("failed to prepare statement", err)
-	defer stmt.Finalize()
-
-	err = g.processBugRows(stmt)
-	util.CheckFatal("error processing bug rows", err)
-}
-
-func prepareStmt(db *sqlite.Conn) (*sqlite.Stmt, error) {
-	stmt, err := db.Prepare("SELECT OtherFieldsJSON FROM bugs")
-	if err != nil {
-		return nil, fmt.Errorf("failed to prepare statement: %w", err)
-	}
-	return stmt, nil
-}
+// TODO move database logic into database package
+//func (g *Gitea) UploadBugs(bc *sqlite.Conn) {
+//
+//	stmt, err := prepareStmt(bc)
+//	util.CheckFatal("failed to prepare statement", err)
+//	defer stmt.Finalize()
+//
+//	err = g.processBugRows(stmt)
+//	util.CheckFatal("error processing bug rows", err)
+//}
+//
+//func prepareStmt(db *sqlite.Conn) (*sqlite.Stmt, error) {
+//	stmt, err := db.Prepare("SELECT OtherFieldsJSON FROM bugs")
+//	if err != nil {
+//		return nil, fmt.Errorf("failed to prepare statement: %w", err)
+//	}
+//	return stmt, nil
+//}
 
 func (g *Gitea) createGiteaIssue(bug Bug, rawJSON string) error {
 	issueBody := fmt.Sprintf(

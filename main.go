@@ -80,8 +80,9 @@ func main() {
 			url = os.Args[2]
 		}
 
-		giteaClient := giteacustom.New(url)
-		giteaClient.UploadBugs(db.Conn)
+		// TODO fix this after gitea is decoupled from database
+		//giteaClient := giteacustom.New(url)
+		//giteaClient.UploadBugs(db.Conn)
 
 	default:
 		fmt.Println("invalid command")

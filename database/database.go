@@ -1,13 +1,14 @@
 package database
 
 import (
+	"context"
 	"embed"
 	"encoding/json"
 	"fmt"
 	"hugpoint.tech/freebsd/forge/common/bugzilla"
 	"hugpoint.tech/freebsd/forge/util"
 	"log"
-	"sync"
+	"runtime"
 	"zombiezen.com/go/sqlite"
 	"zombiezen.com/go/sqlite/sqlitex"
 )
@@ -16,8 +17,7 @@ import (
 var schemaFS embed.FS
 
 type DB struct {
-	Conn *sqlite.Conn
-	mu   sync.Mutex
+	pool *sqlitex.Pool
 
 	QInsertBug         string
 	QSelectBugs        string
@@ -32,11 +32,21 @@ func New(path string) DB { // Return a pointer to DB
 	var sql []byte
 	var result DB
 
-	result.Conn, err = sqlite.OpenConn(path, 0)
+	result.pool, err = sqlitex.NewPool(path, sqlitex.PoolOptions{
+		PoolSize: runtime.NumCPU() * 4,
+	})
+
+	conn := result.pool.Get(context.Background())
+	if conn != nil {
+		util.Fatal("failed to open database connection")
+	}
+	defer conn.Close()
+
 	util.CheckFatal("error opening database", err)
 	sql, err = schemaFS.ReadFile("schema.sql")
 	util.CheckFatal("failed to read schema", err)
-	err = sqlitex.ExecScript(result.Conn, string(sql))
+
+	err = sqlitex.ExecScript(conn, string(sql))
 	util.CheckFatal("error applying schema", err)
 
 	sql, err = schemaFS.ReadFile("insert.sql")
@@ -69,6 +79,12 @@ func New(path string) DB { // Return a pointer to DB
 func (db *DB) GetDistinctUsers() ([]bugzilla.User, error) {
 	var users []bugzilla.User
 
+	conn := db.pool.Get(context.Background())
+	if conn != nil {
+		util.Fatal("failed to open database connection")
+	}
+	defer conn.Close()
+
 	execOptions := &sqlitex.ExecOptions{
 		ResultFunc: func(stmt *sqlite.Stmt) error {
 			user := bugzilla.User{
@@ -86,7 +102,7 @@ func (db *DB) GetDistinctUsers() ([]bugzilla.User, error) {
 	}
 
 	// Execute distinct query on the bugs table to retrieve unique user data
-	err := sqlitex.ExecuteTransient(db.Conn, db.QDistinctUsers, execOptions)
+	err := sqlitex.ExecuteTransient(conn, db.QDistinctUsers, execOptions)
 	if err != nil {
 		return nil, err
 	}
@@ -99,6 +115,12 @@ func (db *DB) InsertBug(bug bugzilla.Bug) {
 	bugJson, err := json.Marshal(bug)
 	util.CheckFatal("error marshalling bug JSON", err)
 
+	conn := db.pool.Get(context.Background())
+	if conn != nil {
+		util.Fatal("failed to open database connection")
+	}
+	defer conn.Close()
+
 	execOptions := sqlitex.ExecOptions{
 		Args: []interface{}{
 			bug.ID,
@@ -108,17 +130,16 @@ func (db *DB) InsertBug(bug bugzilla.Bug) {
 		},
 	}
 
-	err = sqlitex.ExecuteTransient(db.Conn, db.QInsertBug, &execOptions)
+	err = sqlitex.ExecuteTransient(conn, db.QInsertBug, &execOptions)
 	util.CheckFatal(fmt.Sprintf("error inserting bug %d", bug.ID), err)
 }
 
 func (db *DB) InsertComment(comment bugzilla.Comment) error {
-	db.mu.Lock()
-	defer db.mu.Unlock()
-
-	if db.Conn == nil {
-		return fmt.Errorf("database connection is not initialized")
+	conn := db.pool.Get(context.Background())
+	if conn != nil {
+		util.Fatal("failed to open database connection")
 	}
+	defer conn.Close()
 
 	execOptions := sqlitex.ExecOptions{
 		Args: []interface{}{
@@ -132,7 +153,7 @@ func (db *DB) InsertComment(comment bugzilla.Comment) error {
 	}
 
 	// Try inserting the comment into the database
-	err := sqlitex.Execute(db.Conn, db.QInsertComments, &execOptions)
+	err := sqlitex.Execute(conn, db.QInsertComments, &execOptions)
 	if err != nil {
 		return fmt.Errorf("error inserting comment: %v", err)
 	}
@@ -140,35 +161,13 @@ func (db *DB) InsertComment(comment bugzilla.Comment) error {
 	return nil
 }
 
-func (db *DB) GetAllBugIDs() ([]int64, error) {
-	var bugIDs []int64
-	query := `SELECT id FROM bugs`
-
-	// Prepare a statement
-	stmt, err := db.Conn.Prepare(query)
-	if err != nil {
-		return nil, fmt.Errorf("error preparing statement: %v", err)
-	}
-	defer stmt.Finalize()
-
-	// Execute the query and fetch bug IDs
-	for {
-		hasRow, err := stmt.Step()
-		if err != nil {
-			return nil, fmt.Errorf("error stepping through result: %v", err)
-		}
-		if !hasRow {
-			break
-		}
-
-		bugID := stmt.ColumnInt64(0)
-		bugIDs = append(bugIDs, bugID)
-	}
-
-	return bugIDs, nil
-}
-
 func (db *DB) ForEachBug(pred func(b bugzilla.Bug) error) error {
+	conn := db.pool.Get(context.Background())
+	if conn != nil {
+		util.Fatal("failed to open database connection")
+	}
+	defer conn.Close()
+
 	opts := sqlitex.ExecOptions{
 		ResultFunc: func(stmt *sqlite.Stmt) error {
 			txt := stmt.ColumnText(0)
@@ -182,5 +181,5 @@ func (db *DB) ForEachBug(pred func(b bugzilla.Bug) error) error {
 		Args: make([]any, 0),
 	}
 
-	return sqlitex.Execute(db.Conn, db.QSelectBugs, &opts)
+	return sqlitex.Execute(conn, db.QSelectBugs, &opts)
 }
