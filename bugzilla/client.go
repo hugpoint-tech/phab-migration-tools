@@ -12,25 +12,25 @@ import (
 	"os"
 )
 
-type BugzClient struct {
+type Client struct {
 	token string
 	URL   string
 	http  *http.Client
 }
 
-type BugzLoginResponse struct {
+type loginResponse struct {
 	Id    int    `json:"id"`
 	Token string `json:"token"`
 }
 
-func NewBugzClient() *BugzClient {
+func NewClient() Client {
 	login := os.Getenv("BUGZILLA_LOGIN") //Retrieve env var values and check if they are empty
 	password := os.Getenv("BUGZILLA_PASSWORD")
 	if login == "" || password == "" {
 		log.Fatal("BUGZILLA_LOGIN or BUGZILLA_PASSWORD is not set")
 	}
 
-	bc := &BugzClient{
+	bc := Client{
 		URL:   "https://bugs.freebsd.org/bugzilla/rest",
 		token: "",
 		http:  &http.Client{},
@@ -49,7 +49,7 @@ func NewBugzClient() *BugzClient {
 		util.Fatalf("login failed, status code: %d", response.StatusCode)
 	}
 
-	var loginResponse BugzLoginResponse
+	var loginResponse loginResponse
 	err = json.NewDecoder(response.Body).Decode(&loginResponse)
 	util.CheckFatal("error reading bugzilla login response body", err)
 
@@ -62,7 +62,7 @@ func NewBugzClient() *BugzClient {
 }
 
 // DownloadBugzillaBugs downloads all bugs from the Bugzilla API and saves them to individual JSON files.
-func (bc *BugzClient) DownloadBugzillaBugs() ([]Bug, error) { // Make URL to bugs
+func (bc *Client) DownloadBugzillaBugs() ([]Bug, error) { // Make URL to bugs
 	apiURL := bc.URL + "/bug"
 
 	// Specify the pagination parameters
@@ -117,17 +117,7 @@ func (bc *BugzClient) DownloadBugzillaBugs() ([]Bug, error) { // Make URL to bug
 	return bugs, nil
 }
 
-func (bc *BugzClient) ShowBugs() error {
-	fmt.Println("showing bugs")
-	return nil
-}
-
-func (bc *BugzClient) ListBugs() error {
-	fmt.Println("listing bugs")
-	return nil
-}
-
-func (bc *BugzClient) DownloadBugComments(bugID int64) ([]Comment, error) {
+func (bc *Client) DownloadBugComments(bugID int64) ([]Comment, error) {
 	apiURL := fmt.Sprintf("%s/bug/%d/comment", bc.URL, bugID)
 	params := url.Values{}
 	params.Set("token", bc.token)
@@ -152,7 +142,7 @@ func (bc *BugzClient) DownloadBugComments(bugID int64) ([]Comment, error) {
 	return commentsResponse.Bugs[int(bugID)].Comments, nil
 }
 
-func (bc *BugzClient) DownloadBugAttachments(bugID int64) ([]Attachment, error) {
+func (bc *Client) DownloadBugAttachments(bugID int64) ([]Attachment, error) {
 	apiURL := fmt.Sprintf("%s/bug/%d/attachment", bc.URL, bugID)
 	params := url.Values{}
 	params.Set("token", bc.token)

@@ -6,8 +6,9 @@ import (
 	"hugpoint.tech/freebsd/forge/common/bugzilla"
 	"hugpoint.tech/freebsd/forge/database"
 	"hugpoint.tech/freebsd/forge/forgejo"
+	"hugpoint.tech/freebsd/forge/operations"
 	"hugpoint.tech/freebsd/forge/util"
-	"log"
+
 	"os"
 )
 
@@ -18,36 +19,33 @@ func main() {
 	}
 	command := os.Args[1]
 	db := database.New("migrator.db")
-	bc := NewBugzClient()
+	bugzClient := NewClient()
 
 	switch command {
 	case "bugzilla-download-bugs":
+		operations.DownloadBugzillaBugs(&bugzClient, &db)
 
-		//err := bc.DownloadBugzillaBugs()
-		//if err != nil {
-		//	log.Fatalf("Error downloading bugs: %v\n", err)
-		//}
 	case "help":
 		printHelp()
 	case "bugzilla-list-bugs":
-		err := bc.ListBugs()
-		if err != nil {
-			log.Fatalf("Error listing bugs: %v\n", err)
-		}
+		//err := bugzClient.ListBugs()
+		//if err != nil {
+		//	log.Fatalf("Error listing bugs: %v\n", err)
+		//}
 	case "bugzilla-download-users":
-		//err := bc.DownloadBugzillaUsers()
+		//err := bugzClient.DownloadBugzillaUsers()
 		//if err != nil {
 		//	log.Fatalf("Error downloading users: %v\n", err)
 		//}
 	case "bugzilla-show-bugs":
-		if err := bc.ShowBugs(); err != nil {
-			log.Fatalf("error showing bugs: %v\n", err)
-		}
+		//if err := bugzClient.ShowBugs(); err != nil {
+		//	log.Fatalf("error showing bugs: %v\n", err)
+		//}
 	case "bugzilla-download-comments":
 		// Fetch bugs from the SQLite database
 		err := db.ForEachBug(func(bug bugzilla.Bug) error {
 			fmt.Println("Downloading comments for", bug.ID)
-			// err := bc.DownloadAllComments()
+			// err := bugzClient.DownloadAllComments()
 			return nil
 		})
 		util.CheckFatal("failed to download comments", err)
@@ -60,7 +58,7 @@ func main() {
 		//}
 		//// Download attachments for each bug
 		//for _, bug := range bugs {
-		//	err := bc.DownloadBugAttachments(int64(bug.ID))
+		//	err := bugzClient.DownloadBugAttachments(int64(bug.ID))
 		//	if err != nil {
 		//		fmt.Printf("Error downloading attachments for bug %d: %v", bug.ID, err)
 		//	}

@@ -93,7 +93,7 @@ func (db *DB) GetDistinctUsers() ([]bugzilla.User, error) {
 
 }
 
-func (db *DB) InsertBug(bug bugzilla.Bug) {
+func (db *DB) InsertBug(bug bugzilla.Bug) error {
 	bugJson, err := json.Marshal(bug)
 	util.CheckFatal("error marshalling bug JSON", err)
 
@@ -112,8 +112,7 @@ func (db *DB) InsertBug(bug bugzilla.Bug) {
 		},
 	}
 
-	err = sqlitex.ExecuteTransient(conn, qInsertBug, &execOptions)
-	util.CheckFatal(fmt.Sprintf("error inserting bug %d", bug.ID), err)
+	return sqlitex.ExecuteTransient(conn, qInsertBug, &execOptions)
 }
 
 func (db *DB) InsertComment(comment bugzilla.Comment) error {

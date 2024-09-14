@@ -9,7 +9,7 @@ import (
 type CommentDownloadWorker struct {
 	ID        int
 	BugIDChan <-chan int64
-	Client    *BugzClient
+	Client    *Client
 	DB        *DB
 }
 
@@ -32,7 +32,7 @@ func (worker *CommentDownloadWorker) downloadComment() {
 	}
 }
 
-func (bc *BugzClient) DownloadAllComments(ids []int64) error {
+func (bc *Client) DownloadAllComments(ids []int64) error {
 
 	// Create channel to send bugIDs for workers to process
 	work := make(chan int64)
@@ -75,7 +75,7 @@ func (bc *BugzClient) DownloadAllComments(ids []int64) error {
 type AttachmentDownloadWorker struct {
 	ID     int
 	Work   <-chan int
-	Client *BugzClient
+	Client *Client
 }
 
 func (worker *AttachmentDownloadWorker) DownloadAttachments() {
