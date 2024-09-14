@@ -2,10 +2,10 @@ package main
 
 import (
 	"fmt"
-	. "hugpoint.tech/freebsd/forge/bugz"
+	. "hugpoint.tech/freebsd/forge/bugzilla"
 	"hugpoint.tech/freebsd/forge/common/bugzilla"
 	"hugpoint.tech/freebsd/forge/database"
-	giteacustom "hugpoint.tech/freebsd/forge/gitea"
+	giteacustom "hugpoint.tech/freebsd/forge/forgejo"
 	"hugpoint.tech/freebsd/forge/util"
 	"log"
 	"os"

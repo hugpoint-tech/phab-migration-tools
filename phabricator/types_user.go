@@ -1,4 +1,4 @@
-package phab
+package phabricator
 
 type UserPolicy struct {
 	Edit string `json:"edit"`

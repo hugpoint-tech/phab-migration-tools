@@ -1,4 +1,4 @@
-package phab
+package phabricator
 
 type Cursor struct {
 	After  string `json:"after"`

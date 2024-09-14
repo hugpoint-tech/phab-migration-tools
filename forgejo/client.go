@@ -1,4 +1,4 @@
-package gitea_custom
+package forgejo
 
 import (
 	"code.gitea.io/sdk/gitea"

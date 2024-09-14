@@ -1,4 +1,4 @@
-package phab
+package phabricator
 
 type PhabClient struct {
 	token string

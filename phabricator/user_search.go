@@ -1,4 +1,4 @@
-package phab
+package phabricator
 
 import (
 	"encoding/json"
