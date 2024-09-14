@@ -21,59 +21,47 @@ type DB struct {
 
 	QInsertBug         string
 	QSelectBugs        string
+	QSelectUsers       string
 	QInsertComments    string
 	QInsertUsers       string
 	QInsertAttachments string
 	QDistinctUsers     string
 }
 
+func embeddedSQL(filename string) string {
+	sql, err := schemaFS.ReadFile(filename)
+	util.CheckFatal("failed to read embedded SQL file", err)
+	return string(sql)
+}
+
 func New(path string) DB { // Return a pointer to DB
 	var err error
-	var sql []byte
-	var result DB
+	var db DB
 
-	result.pool, err = sqlitex.NewPool(path, sqlitex.PoolOptions{
+	db.pool, err = sqlitex.NewPool(path, sqlitex.PoolOptions{
 		PoolSize: runtime.NumCPU() * 4,
 	})
 
-	conn := result.pool.Get(context.Background())
+	conn := db.pool.Get(context.Background())
 	if conn != nil {
 		util.Fatal("failed to open database connection")
 	}
 	defer conn.Close()
-
 	util.CheckFatal("error opening database", err)
-	sql, err = schemaFS.ReadFile("schema.sql")
-	util.CheckFatal("failed to read schema", err)
 
-	err = sqlitex.ExecScript(conn, string(sql))
+	schema := embeddedSQL("schema.sql")
+	err = sqlitex.ExecScript(conn, schema)
 	util.CheckFatal("error applying schema", err)
 
-	sql, err = schemaFS.ReadFile("insert.sql")
-	util.CheckFatal("failed to read embedded file", err)
-	result.QInsertBug = string(sql)
+	db.QInsertBug = embeddedSQL("insert.sql")
+	db.QSelectBugs = embeddedSQL("select_all_bugs.sql")
+	db.QSelectUsers = embeddedSQL("select_all_users.sql")
+	db.QDistinctUsers = embeddedSQL("select_distinct_users.sql")
+	db.QInsertComments = embeddedSQL("insert_comments.sql")
+	db.QInsertUsers = embeddedSQL("insert_user.sql")
+	db.QInsertAttachments = embeddedSQL("insert_attachments.sql")
 
-	sql, err = schemaFS.ReadFile("select_all_bugs.sql")
-	util.CheckFatal("failed to read embedded file", err)
-	result.QSelectBugs = string(sql)
-
-	sql, err = schemaFS.ReadFile("select_distinct_users.sql")
-	util.CheckFatal("failed to read embedded file", err)
-	result.QDistinctUsers = string(sql)
-
-	sql, err = schemaFS.ReadFile("insert_comments.sql")
-	util.CheckFatal("failed to read embedded file", err)
-	result.QInsertComments = string(sql)
-
-	sql, err = schemaFS.ReadFile("insert_user.sql")
-	util.CheckFatal("failed to read embedded file", err)
-	result.QInsertUsers = string(sql)
-
-	sql, err = schemaFS.ReadFile("insert_attachments.sql")
-	util.CheckFatal("failed to read embedded file", err)
-	result.QInsertAttachments = string(sql)
-
-	return result // Return the pointer to DB
+	return db // Return the pointer to DB
 }
 
 func (db *DB) GetDistinctUsers() ([]bugzilla.User, error) {
@@ -182,4 +170,25 @@ func (db *DB) ForEachBug(pred func(b bugzilla.Bug) error) error {
 	}
 
 	return sqlitex.Execute(conn, db.QSelectBugs, &opts)
+}
+
+func (db *DB) ForEachUser(pred func(b bugzilla.User) error) error {
+	conn := db.pool.Get(context.Background())
+	if conn != nil {
+		util.Fatal("failed to open database connection")
+	}
+	defer conn.Close()
+
+	opts := sqlitex.ExecOptions{
+		ResultFunc: func(stmt *sqlite.Stmt) error {
+			var user bugzilla.User
+			user.Email = stmt.ColumnText(0)
+			user.Name = stmt.ColumnText(1)
+
+			return pred(user)
+		},
+		Args: make([]any, 0),
+	}
+
+	return sqlitex.Execute(conn, db.QSelectUsers, &opts)
 }
