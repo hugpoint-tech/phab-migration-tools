@@ -7,7 +7,6 @@ import (
 	"hugpoint.tech/freebsd/forge/common/bugzilla"
 	"hugpoint.tech/freebsd/forge/util"
 	"log"
-	"sync"
 	"zombiezen.com/go/sqlite"
 	"zombiezen.com/go/sqlite/sqlitex"
 )
@@ -24,7 +23,6 @@ type DB struct {
 	QInsertUsers       string
 	QInsertAttachments string
 	QDistinctUsers     string
-	Mutex              sync.Mutex // Declare mutex for thread-safe inserts
 }
 
 func New(path string) *DB { // Return a pointer to DB
@@ -113,8 +111,6 @@ func (db *DB) InsertBug(bug bugzilla.Bug) {
 }
 
 func (db *DB) InsertComment(comment bugzilla.Comment) error {
-	db.Mutex.Lock()         // Lock the mutex to prevent race conditions
-	defer db.Mutex.Unlock() // Ensure mutex is unlocked after the operation
 
 	execOptions := sqlitex.ExecOptions{
 		Args: []interface{}{
