@@ -184,20 +184,3 @@ func (db *DB) ForEachBug(pred func(b bugzilla.Bug) error) error {
 
 	return sqlitex.Execute(db.Conn, db.QSelectBugs, &opts)
 }
-
-func (db *DB) ForEachBug(pred func(b bugzilla.Bug) error) error {
-	opts := sqlitex.ExecOptions{
-		ResultFunc: func(stmt *sqlite.Stmt) error {
-			txt := stmt.ColumnText(0)
-			var bug bugzilla.Bug
-			err := json.Unmarshal([]byte(txt), &bug)
-			if err != nil {
-				return err
-			}
-			return pred(bug)
-		},
-		Args: make([]any, 0),
-	}
-
-	return sqlitex.Execute(db.Conn, db.QSelectBugs, &opts)
-}
