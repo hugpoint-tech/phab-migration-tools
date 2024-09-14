@@ -13,7 +13,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"zombiezen.com/go/sqlite"
 	"zombiezen.com/go/sqlite/sqlitex"
 )
 
@@ -71,12 +70,6 @@ func NewBugzClient(db *database.DB) *BugzClient {
 // DownloadBugzillaBugs downloads all bugs from the Bugzilla API and saves them to individual JSON files.
 func (bc *BugzClient) DownloadBugzillaBugs() error { // Make URL to bugs
 	apiURL := bc.URL + "/bug"
-
-	// Create a 'bugs' folder if it doesn't exist
-	err := os.MkdirAll("bugs", os.ModePerm)
-	if err != nil && !os.IsExist(err) {
-		return fmt.Errorf("error creating 'users' folder: %v", err)
-	}
 
 	// Specify the pagination parameters
 	pageSize := 1000
@@ -253,7 +246,11 @@ func (bc *BugzClient) DownloadBugzillaUsers() error {
 	return nil
 }
 
-func (bc *BugzClient) DownloadBugzillaComments(bugID int64) error {
+func (bc *BugzClient) DownloadBugzillaComments(bugID int64) (int, error) {
+	if bc.DB == nil || bc.DB.Conn == nil {
+		return 0, fmt.Errorf("database connection is not initialized")
+	}
+
 	apiURL := fmt.Sprintf("%s/bug/%d/comment", bc.URL, bugID)
 	params := url.Values{}
 	params.Set("token", bc.token)
@@ -261,28 +258,33 @@ func (bc *BugzClient) DownloadBugzillaComments(bugID int64) error {
 	fullURL := apiURL + "?" + params.Encode()
 	response, err := bc.http.Get(fullURL)
 	if err != nil {
-		return fmt.Errorf("error making GET request to %s: %v", fullURL, err)
+		return 0, fmt.Errorf("error making GET request to %s: %v", fullURL, err)
 	}
 	defer response.Body.Close()
 
 	body, err := io.ReadAll(response.Body)
 	if err != nil {
-		return fmt.Errorf("error reading response body from %s: %v", fullURL, err)
+		return 0, fmt.Errorf("error reading response body from %s: %v", fullURL, err)
 	}
 
 	var commentsResponse CommentsResponse
 	if err := json.Unmarshal(body, &commentsResponse); err != nil {
-		return fmt.Errorf("error decoding JSON: %v", err)
+		return 0, fmt.Errorf("error decoding JSON: %v", err)
 	}
 
 	comments := commentsResponse.Bugs[int(bugID)].Comments
 	commentCount := 0
 	for _, comment := range comments {
-		bc.DB.InsertComment(comment)
+		err := bc.DB.InsertComment(comment)
+		if err != nil {
+			log.Printf("Error inserting comment for bug %d, comment ID %d: %v", comment.BugID, comment.ID, err)
+			continue
+		}
 		commentCount++
 	}
+
 	fmt.Printf("Downloaded %d comments for bug %d\n", commentCount, bugID)
-	return nil
+	return commentCount, nil // Return comment count instead of comments slice
 }
 
 func (bc *BugzClient) DownloadBugzillaAttachments(bugID int64) error {
@@ -309,8 +311,6 @@ func (bc *BugzClient) DownloadBugzillaAttachments(bugID int64) error {
 
 	attachments := attachmentsResponse.Bugs[int(bugID)]
 
-	// Read the insert query from the embedded file
-
 	attachmentsCount := 0
 	for _, attachment := range attachments {
 		execOptions := sqlitex.ExecOptions{
@@ -329,25 +329,4 @@ func (bc *BugzClient) DownloadBugzillaAttachments(bugID int64) error {
 	}
 	fmt.Printf("Downloaded %d attachments for bug %d\n", attachmentsCount, bugID)
 	return nil
-}
-
-func ListBugs(db *sqlite.Conn) ([]Bug, error) {
-	var bugs []Bug
-	query := "SELECT id FROM bugs"
-	stmt := db.Prep(query)
-	defer stmt.Finalize()
-
-	for {
-		hasNext, err := stmt.Step()
-		if err != nil {
-			return nil, fmt.Errorf("error fetching bugs: %v", err)
-		}
-		if !hasNext {
-			break
-		}
-		bugID := stmt.ColumnInt64(0)
-		bugs = append(bugs, Bug{ID: int(bugID)})
-	}
-
-	return bugs, nil
 }

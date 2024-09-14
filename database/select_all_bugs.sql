@@ -1,0 +1,1 @@
+select OtherFieldsJSON from bugs;

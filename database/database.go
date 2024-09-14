@@ -7,6 +7,7 @@ import (
 	"hugpoint.tech/freebsd/forge/common/bugzilla"
 	"hugpoint.tech/freebsd/forge/util"
 	"log"
+	"sync"
 	"zombiezen.com/go/sqlite"
 	"zombiezen.com/go/sqlite/sqlitex"
 )
@@ -16,15 +17,17 @@ var schemaFS embed.FS
 
 type DB struct {
 	Conn *sqlite.Conn
+	mu   sync.Mutex
 
 	QInsertBug         string
+	QSelectBugs        string
 	QInsertComments    string
 	QInsertUsers       string
 	QInsertAttachments string
 	QDistinctUsers     string
 }
 
-func New(path string) DB {
+func New(path string) DB { // Return a pointer to DB
 	var err error
 	var sql []byte
 	var result DB
@@ -39,6 +42,10 @@ func New(path string) DB {
 	sql, err = schemaFS.ReadFile("insert.sql")
 	util.CheckFatal("failed to read embedded file", err)
 	result.QInsertBug = string(sql)
+
+	sql, err = schemaFS.ReadFile("select_all_bugs.sql")
+	util.CheckFatal("failed to read embedded file", err)
+	result.QSelectBugs = string(sql)
 
 	sql, err = schemaFS.ReadFile("distinct.sql")
 	util.CheckFatal("failed to read embedded file", err)
@@ -56,7 +63,7 @@ func New(path string) DB {
 	util.CheckFatal("failed to read embedded file", err)
 	result.QInsertAttachments = string(sql)
 
-	return result
+	return result // Return the pointer to DB
 }
 
 func (db *DB) GetDistinctUsers() ([]bugzilla.User, error) {
@@ -105,7 +112,13 @@ func (db *DB) InsertBug(bug bugzilla.Bug) {
 	util.CheckFatal(fmt.Sprintf("error inserting bug %d", bug.ID), err)
 }
 
-func (db *DB) InsertComment(comment bugzilla.Comment) {
+func (db *DB) InsertComment(comment bugzilla.Comment) error {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+
+	if db.Conn == nil {
+		return fmt.Errorf("database connection is not initialized")
+	}
 
 	execOptions := sqlitex.ExecOptions{
 		Args: []interface{}{
@@ -114,8 +127,60 @@ func (db *DB) InsertComment(comment bugzilla.Comment) {
 			comment.AttachmentID,
 			comment.CreationTime,
 			comment.Creator,
-			comment.Text},
+			comment.Text,
+		},
 	}
+
+	// Try inserting the comment into the database
 	err := sqlitex.Execute(db.Conn, db.QInsertComments, &execOptions)
-	util.CheckFatal("error inserting comment", err)
+	if err != nil {
+		return fmt.Errorf("error inserting comment: %v", err)
+	}
+
+	return nil
+}
+
+func (db *DB) GetAllBugIDs() ([]int64, error) {
+	var bugIDs []int64
+	query := `SELECT id FROM bugs`
+
+	// Prepare a statement
+	stmt, err := db.Conn.Prepare(query)
+	if err != nil {
+		return nil, fmt.Errorf("error preparing statement: %v", err)
+	}
+	defer stmt.Finalize()
+
+	// Execute the query and fetch bug IDs
+	for {
+		hasRow, err := stmt.Step()
+		if err != nil {
+			return nil, fmt.Errorf("error stepping through result: %v", err)
+		}
+		if !hasRow {
+			break
+		}
+
+		bugID := stmt.ColumnInt64(0)
+		bugIDs = append(bugIDs, bugID)
+	}
+
+	return bugIDs, nil
+}
+
+func (db *DB) ForEachBug(pred func(b bugzilla.Bug) error) error {
+	opts := sqlitex.ExecOptions{
+		ResultFunc: func(stmt *sqlite.Stmt) error {
+			txt := stmt.ColumnText(0)
+			var bug bugzilla.Bug
+			err := json.Unmarshal([]byte(txt), &bug)
+			if err != nil {
+				return err
+			}
+			return pred(bug)
+		},
+		Args: make([]any, 0),
+	}
+
+	return sqlitex.Execute(db.Conn, db.QSelectBugs, &opts)
 }
