@@ -22,3 +22,10 @@ go.work
 
 .idea/
 
+# binary name
+migrator
+
+# sqlite files
+migrator.db
+migrator.db-shm
+migrator.db-wal
