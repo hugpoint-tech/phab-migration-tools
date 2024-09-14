@@ -5,7 +5,7 @@ import (
 	. "hugpoint.tech/freebsd/forge/bugzilla"
 	"hugpoint.tech/freebsd/forge/common/bugzilla"
 	"hugpoint.tech/freebsd/forge/database"
-	giteacustom "hugpoint.tech/freebsd/forge/forgejo"
+	"hugpoint.tech/freebsd/forge/forgejo"
 	"hugpoint.tech/freebsd/forge/util"
 	"log"
 	"os"
@@ -70,7 +70,7 @@ func main() {
 
 		var url string
 		if len(os.Args) < 3 {
-			url = giteacustom.DEFAULT_GITEA_URL
+			url = forgejo.DEFAULT_GITEA_URL
 			fmt.Println("using default gitea url", url)
 		} else {
 			url = os.Args[2]
