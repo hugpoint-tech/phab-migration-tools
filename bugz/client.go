@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	. "hugpoint.tech/freebsd/forge/common/bugzilla"
-	"hugpoint.tech/freebsd/forge/database"
 	"hugpoint.tech/freebsd/forge/util"
 	"io"
 	"log"
@@ -24,7 +23,7 @@ type BugzLoginResponse struct {
 	Token string `json:"token"`
 }
 
-func NewBugzClient(db *database.DB) *BugzClient {
+func NewBugzClient() *BugzClient {
 	login := os.Getenv("BUGZILLA_LOGIN") //Retrieve env var values and check if they are empty
 	password := os.Getenv("BUGZILLA_PASSWORD")
 	if login == "" || password == "" {

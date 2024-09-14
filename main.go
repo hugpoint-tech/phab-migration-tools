@@ -18,19 +18,15 @@ func main() {
 	}
 	command := os.Args[1]
 	db := database.New("migrator.db")
-
-	bc := NewBugzClient(&db) // Create a BugzClient instance
-
-	if bc.DB == nil {
-		util.Fatalf("DB is not initialized")
-	}
+	bc := NewBugzClient()
 
 	switch command {
 	case "bugzilla-download-bugs":
-		err := bc.DownloadBugzillaBugs()
-		if err != nil {
-			log.Fatalf("Error downloading bugs: %v\n", err)
-		}
+
+		//err := bc.DownloadBugzillaBugs()
+		//if err != nil {
+		//	log.Fatalf("Error downloading bugs: %v\n", err)
+		//}
 	case "help":
 		printHelp()
 	case "bugzilla-list-bugs":
@@ -39,10 +35,10 @@ func main() {
 			log.Fatalf("Error listing bugs: %v\n", err)
 		}
 	case "bugzilla-download-users":
-		err := bc.DownloadBugzillaUsers()
-		if err != nil {
-			log.Fatalf("Error downloading users: %v\n", err)
-		}
+		//err := bc.DownloadBugzillaUsers()
+		//if err != nil {
+		//	log.Fatalf("Error downloading users: %v\n", err)
+		//}
 	case "bugzilla-show-bugs":
 		if err := bc.ShowBugs(); err != nil {
 			log.Fatalf("error showing bugs: %v\n", err)
@@ -64,7 +60,7 @@ func main() {
 		//}
 		//// Download attachments for each bug
 		//for _, bug := range bugs {
-		//	err := bc.DownloadBugzillaAttachments(int64(bug.ID))
+		//	err := bc.DownloadBugAttachments(int64(bug.ID))
 		//	if err != nil {
 		//		fmt.Printf("Error downloading attachments for bug %d: %v", bug.ID, err)
 		//	}

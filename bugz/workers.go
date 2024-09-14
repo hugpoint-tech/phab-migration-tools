@@ -24,7 +24,7 @@ func (worker *CommentDownloadWorker) downloadComment() {
 		}
 
 		// Download and insert comments directly
-		_, err := worker.Client.DownloadBugzillaComments(bugID)
+		_, err := worker.Client.DownloadBugComments(bugID)
 		if err != nil {
 			fmt.Printf("Error downloading comments for bug %d: %v", bugID, err)
 			continue
@@ -32,12 +32,7 @@ func (worker *CommentDownloadWorker) downloadComment() {
 	}
 }
 
-func (bc *BugzClient) DownloadAllComments() error {
-	// Fetch all bug IDs that need comment downloads from the database
-	bugIDs, err := bc.DB.GetAllBugIDs()
-	if err != nil {
-		fmt.Printf("Error fetching bug IDs: %v", err)
-	}
+func (bc *BugzClient) DownloadAllComments(ids []int64) error {
 
 	// Create channel to send bugIDs for workers to process
 	work := make(chan int64)
@@ -49,8 +44,7 @@ func (bc *BugzClient) DownloadAllComments() error {
 	for workerNum := 0; workerNum < maxWorkers; workerNum++ {
 		worker := CommentDownloadWorker{
 			BugIDChan: work,
-			Client:    bc,    // Pass Bugzilla client reference
-			DB:        bc.DB, // Pass database reference
+			Client:    bc, // Pass Bugzilla client reference
 		}
 
 		// Increment the WaitGroup counter
@@ -64,7 +58,7 @@ func (bc *BugzClient) DownloadAllComments() error {
 	}
 
 	// Send each bugID to the workers through the work channel
-	for _, bugID := range bugIDs {
+	for _, bugID := range ids {
 		work <- bugID
 	}
 
