@@ -129,12 +129,17 @@ func (bc *Client) DownloadBugComments(bugID int) ([]Comment, error) {
 	}
 	defer response.Body.Close()
 
+	if response.StatusCode >= http.StatusBadRequest {
+		return nil, fmt.Errorf("comment request error: %s", response.Status)
+	}
+
 	body, err := io.ReadAll(response.Body)
 	if err != nil {
 		return nil, fmt.Errorf("error reading response body from %s: %v", fullURL, err)
 	}
 
 	var commentsResponse CommentsResponse
+
 	if err := json.Unmarshal(body, &commentsResponse); err != nil {
 		return nil, fmt.Errorf("error decoding JSON: %v", err)
 	}

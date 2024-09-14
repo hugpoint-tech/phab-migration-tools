@@ -10,11 +10,10 @@ import (
 	types "hugpoint.tech/freebsd/forge/common/bugzilla"
 	"hugpoint.tech/freebsd/forge/database"
 	"hugpoint.tech/freebsd/forge/util"
-	"runtime"
 	"sync"
 )
 
-var DOWNLOAD_WORKER_COUNT = runtime.NumCPU() * 4
+var DOWNLOAD_WORKER_COUNT = 20
 
 const COMMENT_BATCH_SIZE = 100
 
@@ -27,27 +26,25 @@ type worker struct {
 
 func (w *worker) downloadComment(in <-chan int, out chan<- types.Comment) {
 	defer w.wg.Done()
-	exitMessage := fmt.Sprintf("%s finished", w.id)
-	defer fmt.Println(exitMessage)
 
 	for id := range in {
 		comments, err := w.bugz.DownloadBugComments(id)
 		if err != nil {
-			exitMessage = fmt.Errorf("%s: failed to download comments for bug %d: %w", w.id, id, err).Error()
-			return
+			fmt.Printf("%s: failed to download comments for bug %d: %s\n", w.id, id, err)
+			continue
 		}
 
 		for _, c := range comments {
 			out <- c
 		}
+		fmt.Printf("%s: downloaded comments for bug %d\n", w.id, id)
 	}
 
+	fmt.Printf("%s finished\n", w.id)
 }
 
 func (w *worker) saveComments(in <-chan types.Comment) {
 	defer w.wg.Done()
-	exitMessage := fmt.Sprintf("%s finished", w.id)
-	defer fmt.Println(exitMessage)
 
 	buffer := make([]types.Comment, 0, COMMENT_BATCH_SIZE)
 
@@ -57,19 +54,22 @@ func (w *worker) saveComments(in <-chan types.Comment) {
 		if len(buffer) == COMMENT_BATCH_SIZE {
 			err := w.db.InsertComment(buffer...)
 			if err != nil {
-				exitMessage = fmt.Errorf("%s: failed to save comments %w", w.id, err).Error()
-				return
+				fmt.Printf("%s: failed to save comments %s\n", w.id, err)
+				continue
 			}
+			fmt.Printf("%s: saved %d comments\n", w.id, len(buffer))
 			buffer = buffer[:0]
 		}
 	}
 
 	err := w.db.InsertComment(buffer...)
+	fmt.Printf("%s: saved %d comments", w.id, len(buffer))
 	if err != nil {
-		exitMessage = fmt.Errorf("%s: failed to save comments %w", w.id, err).Error()
+		fmt.Printf("%s: failed to save comments %s\n", w.id, err)
 		return
 	}
 
+	fmt.Printf("%s finished\n", w.id)
 }
 
 func DownloadBugzillaComments(bugz *bugzilla.Client, db *database.DB) {
@@ -110,6 +110,7 @@ func DownloadBugzillaComments(bugz *bugzilla.Client, db *database.DB) {
 		return nil
 	})
 	util.CheckFatal("failed to read bugs form the database", err)
+
 	close(idChan)
 	downloaderWaitGroup.Wait()
 	close(commentChan)
