@@ -24,14 +24,8 @@ func main() {
 	switch command {
 	case "bugzilla-download-bugs":
 		operations.DownloadBugzillaBugs(&bugzClient, &db)
-
 	case "help":
 		printHelp()
-	case "bugzilla-list-bugs":
-		//err := bugzClient.ListBugs()
-		//if err != nil {
-		//	log.Fatalf("Error listing bugs: %v\n", err)
-		//}
 	case "bugzilla-download-users":
 		//err := bugzClient.DownloadBugzillaUsers()
 		//if err != nil {
@@ -88,7 +82,6 @@ func printHelp() { // not sure about functions descriptions
 	fmt.Println("available commands:\n" +
 		"bugzilla-download-bugs - downloads bugs from bugzilla\n" +
 		"bugzilla-show-bugs - shows bugzilla bugs\n" +
-		"bugzilla-list-bugs - displays downloaded bugs\n" +
 		"bugzilla-download-users - downloads users from bugzilla\n" +
 		"bugzilla-download-comments - downloads comments from bugs db\n" +
 		"bugzilla-download-attachments - downloads attachments from bugs db\n" +
