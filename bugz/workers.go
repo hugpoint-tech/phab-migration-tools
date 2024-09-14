@@ -32,9 +32,15 @@ func (worker *CommentDownloadWorker) downloadComment() {
 	}
 }
 
-func (bc *BugzClient) downloadAllComments() {
-	// Create a buffered channel to send bugIDs for workers to process
-	work := make(chan int64, 1000) // Use a buffered channel to avoid blocking the sender
+func (bc *BugzClient) DownloadAllComments() error {
+	// Fetch all bug IDs that need comment downloads from the database
+	bugIDs, err := bc.DB.GetAllBugIDs()
+	if err != nil {
+		fmt.Printf("Error fetching bug IDs: %v", err)
+	}
+
+	// Create channel to send bugIDs for workers to process
+	work := make(chan int64)
 
 	// Create a WaitGroup to track the worker completion
 	var wg sync.WaitGroup
@@ -57,12 +63,6 @@ func (bc *BugzClient) downloadAllComments() {
 		}(worker)
 	}
 
-	// Fetch all bug IDs that need comment downloads from the database
-	bugIDs, err := bc.DB.GetAllBugIDs()
-	if err != nil {
-		fmt.Printf("Error fetching bug IDs: %v", err)
-	}
-
 	// Send each bugID to the workers through the work channel
 	for _, bugID := range bugIDs {
 		work <- bugID
@@ -75,6 +75,7 @@ func (bc *BugzClient) downloadAllComments() {
 	wg.Wait()
 
 	fmt.Println("All comments downloaded successfully.")
+	return nil
 }
 
 type AttachmentDownloadWorker struct {

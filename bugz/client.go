@@ -247,6 +247,10 @@ func (bc *BugzClient) DownloadBugzillaUsers() error {
 }
 
 func (bc *BugzClient) DownloadBugzillaComments(bugID int64) (int, error) {
+	if bc.DB == nil || bc.DB.Conn == nil {
+		return 0, fmt.Errorf("database connection is not initialized")
+	}
+
 	apiURL := fmt.Sprintf("%s/bug/%d/comment", bc.URL, bugID)
 	params := url.Values{}
 	params.Set("token", bc.token)

@@ -7,6 +7,7 @@ import (
 	"hugpoint.tech/freebsd/forge/common/bugzilla"
 	"hugpoint.tech/freebsd/forge/util"
 	"log"
+	"sync"
 	"zombiezen.com/go/sqlite"
 	"zombiezen.com/go/sqlite/sqlitex"
 )
@@ -16,6 +17,7 @@ var schemaFS embed.FS
 
 type DB struct {
 	Conn *sqlite.Conn
+	mu   sync.Mutex
 
 	QInsertBug         string
 	QSelectBugs        string
@@ -25,10 +27,10 @@ type DB struct {
 	QDistinctUsers     string
 }
 
-func New(path string) *DB { // Return a pointer to DB
+func New(path string) DB { // Return a pointer to DB
 	var err error
 	var sql []byte
-	result := &DB{} // Create DB as a pointer
+	var result DB
 
 	result.Conn, err = sqlite.OpenConn(path, 0)
 	util.CheckFatal("error opening database", err)
@@ -111,6 +113,12 @@ func (db *DB) InsertBug(bug bugzilla.Bug) {
 }
 
 func (db *DB) InsertComment(comment bugzilla.Comment) error {
+	db.mu.Lock()
+	defer db.mu.Unlock()
+
+	if db.Conn == nil {
+		return fmt.Errorf("database connection is not initialized")
+	}
 
 	execOptions := sqlitex.ExecOptions{
 		Args: []interface{}{

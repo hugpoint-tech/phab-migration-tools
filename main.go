@@ -18,7 +18,12 @@ func main() {
 	}
 	command := os.Args[1]
 	db := database.New("migrator.db")
-	bc := NewBugzClient(db) // Create a BugzClient instance
+
+	bc := NewBugzClient(&db) // Create a BugzClient instance
+
+	if bc.DB == nil {
+		util.Fatalf("DB is not initialized")
+	}
 
 	switch command {
 	case "bugzilla-download-bugs":
@@ -46,23 +51,10 @@ func main() {
 		// Fetch bugs from the SQLite database
 		err := db.ForEachBug(func(bug bugzilla.Bug) error {
 			fmt.Println("Downloading comments for", bug.ID)
+			// err := bc.DownloadAllComments()
 			return nil
 		})
 		util.CheckFatal("failed to download comments", err)
-
-		//bugs, err := ListBugs(db.Conn)
-		//if err != nil {
-		//	log.Fatalf("Error fetching bugs: %v", err)
-		//}
-		//// Download comments for each bug
-		//for _, bug := range bugs {
-		//	err := bc.DownloadBugzillaComments(int64(bug.ID))
-		//	if err != nil {
-		//		fmt.Printf("Error downloading comments for bug %d: %v", bug.ID, err)
-		//	}
-		//}
-		//fmt.Println("Downloaded comments for all bugs successfully.")
-
 	case "bugzilla-download-attachments":
 		// Fetch bugs from the SQLite database
 		//bugs, err := ListBugs(db.Conn)
