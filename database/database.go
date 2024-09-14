@@ -57,7 +57,7 @@ func New(path string) DB { // Return a pointer to DB
 	util.CheckFatal("failed to read embedded file", err)
 	result.QSelectBugs = string(sql)
 
-	sql, err = schemaFS.ReadFile("distinct.sql")
+	sql, err = schemaFS.ReadFile("select_distinct_users.sql")
 	util.CheckFatal("failed to read embedded file", err)
 	result.QDistinctUsers = string(sql)
 
