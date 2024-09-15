@@ -34,19 +34,8 @@ func main() {
 		operations.DownloadBugzillaComments(&bugzClient, &db)
 
 	case "bugzilla-download-attachments":
-		// Fetch bugs from the SQLite database
-		//bugs, err := ListBugs(db.Conn)
-		//if err != nil {
-		//	log.Fatalf("Error fetching bugs: %v", err)
-		//}
-		//// Download attachments for each bug
-		//for _, bug := range bugs {
-		//	err := bugzClient.DownloadBugAttachments(int64(bug.ID))
-		//	if err != nil {
-		//		fmt.Printf("Error downloading attachments for bug %d: %v", bug.ID, err)
-		//	}
-		//}
-		//fmt.Println("Downloaded attachments for all bugs successfully.")
+		operations.DownloadBugzillaAttachments(&bugzClient, &db)
+
 	case "gitea-upload-bugs":
 
 		var url string

@@ -17,6 +17,8 @@ var DOWNLOAD_WORKER_COUNT = 20
 
 const COMMENT_BATCH_SIZE = 100
 
+const attachmentBatchSize = 100
+
 type worker struct {
 	id   string
 	bugz *bugzilla.Client
@@ -85,7 +87,7 @@ func DownloadBugzillaComments(bugz *bugzilla.Client, db *database.DB) {
 
 	for idx := range cap(downloaders) {
 		w := worker{
-			id:   fmt.Sprintf("commend-downloader-%d", idx),
+			id:   fmt.Sprintf("comment-downloader-%d", idx),
 			bugz: bugz,
 			wg:   &downloaderWaitGroup,
 		}
@@ -94,7 +96,7 @@ func DownloadBugzillaComments(bugz *bugzilla.Client, db *database.DB) {
 	}
 
 	saver := worker{
-		id: fmt.Sprintf("commend-saver"),
+		id: fmt.Sprintf("comment-saver"),
 		db: db,
 		wg: &saverWaitGroup,
 	}
@@ -128,4 +130,105 @@ func DownloadBugzillaBugs(bugz *bugzilla.Client, db *database.DB) {
 		util.CheckFatal("failed to insert bug into the database", err)
 
 	}
+}
+
+func (w *worker) downloadAttachment(in <-chan int, out chan<- types.Attachment) {
+	defer w.wg.Done() // Mark worker as done when the function exits
+
+	for id := range in { // Loop over the bug IDs received from the in channel
+		attachments, err := w.bugz.DownloadBugAttachments(id) // Download attachments for the bug
+		if err != nil {
+			fmt.Printf("%s: failed to download attachments for bug %d: %s\n", w.id, id, err)
+			continue
+		}
+
+		// Send each downloaded attachment to the out channel
+		for _, a := range attachments {
+			out <- a
+		}
+		fmt.Printf("%s: downloaded attachments for bug %d\n", w.id, id)
+	}
+
+	fmt.Printf("%s finished\n", w.id) // Log that the worker is done
+}
+
+func (w *worker) saveAttachments(in <-chan types.Attachment) {
+	defer w.wg.Done() // Mark worker as done when the function exits
+
+	// Create a buffer to batch attachments for database insertion
+	buffer := make([]types.Attachment, 0, attachmentBatchSize)
+
+	for attachment := range in { // Loop over the attachments received from the in channel
+		buffer = append(buffer, attachment)
+
+		// If the buffer reaches the batch size, insert attachments into the database
+		if len(buffer) == attachmentBatchSize {
+			err := w.db.InsertAttachment(buffer...)
+			if err != nil {
+				fmt.Printf("%s: failed to save attachments %s\n", w.id, err)
+				continue
+			}
+			fmt.Printf("%s: saved %d attachments\n", w.id, len(buffer))
+			buffer = buffer[:0] // Reset buffer after insertion
+		}
+	}
+
+	// Insert any remaining attachments in the buffer
+	err := w.db.InsertAttachment(buffer...)
+	fmt.Printf("%s: saved %d attachments", w.id, len(buffer))
+	if err != nil {
+		fmt.Printf("%s: failed to save attachments %s\n", w.id, err)
+		return
+	}
+
+	fmt.Printf("%s finished\n", w.id) // Log that the worker is done
+}
+
+func DownloadBugzillaAttachments(bugz *bugzilla.Client, db *database.DB) {
+	// Initialize WaitGroups for downloaders and the saver
+	var downloaderWaitGroup sync.WaitGroup
+	var saverWaitGroup sync.WaitGroup
+
+	// Channels for passing bug IDs and attachments between workers
+	idChan := make(chan int)                                           // Channel to pass bug IDs to downloaders
+	attachmentChan := make(chan types.Attachment, attachmentBatchSize) // Buffered channel to pass attachments to the saver
+
+	// Create and launch attachment download workers
+	downloaders := make([]worker, 0, DOWNLOAD_WORKER_COUNT)
+	for idx := range cap(downloaders) {
+		w := worker{
+			id:   fmt.Sprintf("attachment-downloader-%d", idx),
+			bugz: bugz,                 // Bugzilla client for downloading attachments
+			wg:   &downloaderWaitGroup, // Use WaitGroup to track completion
+		}
+		downloaders = append(downloaders, w)
+		downloaderWaitGroup.Add(1) // Add a worker to the WaitGroup
+	}
+
+	// Create and launch the attachment saver worker
+	saver := worker{
+		id: "attachment-saver", // Unique identifier for the saver
+		db: db,                 // Database connection for saving attachments
+		wg: &saverWaitGroup,    // Use WaitGroup to track completion
+	}
+	go saver.saveAttachments(attachmentChan) // Start saving attachments in a goroutine
+
+	// Start each downloader worker in a separate goroutine
+	for _, d := range downloaders {
+		go d.downloadAttachment(idChan, attachmentChan)
+	}
+
+	// Fetch bug IDs from the database and send them to the downloaders
+	err := db.ForEachBug(func(b types.Bug) error {
+		idChan <- b.ID // Send bug ID to the idChan
+		return nil     // Return nil to continue iteration
+	})
+	util.CheckFatal("failed to read bugs from the database", err)
+
+	close(idChan)              // Close idChan to signal no more bug IDs will be sent
+	downloaderWaitGroup.Wait() // Wait for all downloaders to finish
+	close(attachmentChan)      // Close attachmentChan after downloaders are done
+	saverWaitGroup.Wait()      // Wait for the saver to finish saving all attachments
+
+	fmt.Println("All attachments downloaded and saved successfully.")
 }

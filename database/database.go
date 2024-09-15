@@ -152,28 +152,31 @@ func (db *DB) InsertComment(comments ...bugzilla.Comment) (err error) {
 	return
 }
 
-func (db *DB) InsertAttachment(attachment bugzilla.Attachment) error {
+func (db *DB) InsertAttachment(attachments ...bugzilla.Attachment) error {
 	conn := db.pool.Get(context.Background())
 	if conn == nil {
 		util.Fatal("failed to open database connection")
 	}
 	defer db.pool.Put(conn)
 
-	execOptions := sqlitex.ExecOptions{
-		Args: []interface{}{
-			attachment.ID,
-			attachment.BugID,
-			attachment.CreationTime,
-			attachment.Creator,
-			attachment.Summary,
-			attachment.Data,
-		},
-	}
+	// Prepare the query for each attachment in the batch
+	for _, attachment := range attachments {
+		execOptions := sqlitex.ExecOptions{
+			Args: []interface{}{
+				attachment.ID,
+				attachment.BugID,
+				attachment.CreationTime,
+				attachment.Creator,
+				attachment.Summary,
+				attachment.Data,
+			},
+		}
 
-	// Try inserting the comment into the database
-	err := sqlitex.Execute(conn, qInsertAttachments, &execOptions)
-	if err != nil {
-		return fmt.Errorf("error inserting attachments: %v", err)
+		// Try inserting the attachment into the database
+		err := sqlitex.Execute(conn, qInsertAttachments, &execOptions)
+		if err != nil {
+			return fmt.Errorf("error inserting attachments: %v", err)
+		}
 	}
 
 	return nil
