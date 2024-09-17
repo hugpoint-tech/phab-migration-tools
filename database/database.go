@@ -36,25 +36,28 @@ func embeddedSQL(filename string) string {
 	return string(sql)
 }
 
-func New(path string) DB { // Return a pointer to database
+func New(path string) *DB { // Return a pointer to DB
 	var err error
-	var db DB
+	db := &DB{} // Create a pointer to the DB struct
 
+	// Create a new connection pool
 	db.pool, err = sqlitex.NewPool(path, sqlitex.PoolOptions{
 		PoolSize: runtime.NumCPU() * 4,
 	})
 	util.CheckFatal("failed to create connection pool", err)
 
+	// Get a connection from the pool to apply the schema
 	conn := db.pool.Get(context.Background())
 	if conn == nil {
 		util.Fatal("failed to open database connection")
 	}
-	db.pool.Put(conn)
+	defer db.pool.Put(conn) // Put the connection back after applying the schema
 
+	// Apply the schema
 	err = sqlitex.ExecScript(conn, qSchema)
 	util.CheckFatal("error applying schema", err)
 
-	return db
+	return db // Return a pointer to the DB struct
 }
 
 func (db *DB) GetDistinctUsers() ([]bugzilla.User, error) {
