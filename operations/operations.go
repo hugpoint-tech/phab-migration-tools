@@ -131,7 +131,6 @@ func DownloadBugzillaComments(bugz *bugzilla.Client, db *database.DB) {
 	fmt.Printf("%s: finished with total errors: %d\n", saver.id, saver.errorCount)
 	totalErrors += saver.errorCount
 	fmt.Printf("Comments downloaded and saved with %d errors\n", totalErrors)
-
 }
 
 func DownloadBugzillaBugs(bugz *bugzilla.Client, db *database.DB) {
@@ -256,4 +255,5 @@ func DownloadBugzillaAttachments(bugz *bugzilla.Client, db *database.DB) {
 	totalErrors += saver.errorCount
 
 	fmt.Printf("Attachments downloaded and saved with %d errors\n", totalErrors)
+
 }
