@@ -35,6 +35,7 @@ func (w *worker) downloadComment(in <-chan int, out chan<- types.Comment) {
 		if err != nil {
 			fmt.Printf("%s: failed to download comments for bug %d: %s\n", w.id, id, err)
 			w.errorCount++
+			fmt.Printf("%s: total errors: %d\n", w.id, w.errorCount) // Show errors while downloading
 			continue
 		}
 
@@ -60,6 +61,7 @@ func (w *worker) saveComments(in <-chan types.Comment) {
 			if err != nil {
 				fmt.Printf("%s: failed to save comments %s\n", w.id, err)
 				w.errorCount++
+				fmt.Printf("%s: total save errors: %d\n", w.id, w.errorCount) // Show errors while saving
 				continue
 			}
 			fmt.Printf("%s: saved %d comments\n", w.id, len(buffer))
@@ -72,6 +74,7 @@ func (w *worker) saveComments(in <-chan types.Comment) {
 	if err != nil {
 		fmt.Printf("%s: failed to save comments %s\n", w.id, err)
 		w.errorCount++
+		fmt.Printf("%s: total save errors: %d\n", w.id, w.errorCount)
 		return
 	}
 
@@ -131,6 +134,7 @@ func DownloadBugzillaComments(bugz *bugzilla.Client, db *database.DB) {
 	fmt.Printf("%s: finished with total errors: %d\n", saver.id, saver.errorCount)
 	totalErrors += saver.errorCount
 	fmt.Printf("Comments downloaded and saved with %d errors\n", totalErrors)
+
 }
 
 func DownloadBugzillaBugs(bugz *bugzilla.Client, db *database.DB) {
@@ -152,6 +156,7 @@ func (w *worker) downloadAttachment(in <-chan int, out chan<- types.Attachment) 
 		if err != nil {
 			fmt.Printf("%s: failed to download attachments for bug %d: %s\n", w.id, id, err)
 			w.errorCount++
+			fmt.Printf("%s: total errors: %d\n", w.id, w.errorCount) // Show errors while downloading
 			continue
 		}
 
@@ -180,6 +185,7 @@ func (w *worker) saveAttachments(in <-chan types.Attachment) {
 			if err != nil {
 				fmt.Printf("%s: failed to save attachments %s\n", w.id, err)
 				w.errorCount++
+				fmt.Printf("%s: total save errors: %d\n", w.id, w.errorCount) // Show errors while saving
 				continue
 			}
 			fmt.Printf("%s: saved %d attachments\n", w.id, len(buffer))
@@ -193,6 +199,7 @@ func (w *worker) saveAttachments(in <-chan types.Attachment) {
 	if err != nil {
 		fmt.Printf("%s: failed to save attachments %s\n", w.id, err)
 		w.errorCount++
+		fmt.Printf("%s: total save errors: %d\n", w.id, w.errorCount) // Show errors while saving
 		return
 	}
 
@@ -253,7 +260,6 @@ func DownloadBugzillaAttachments(bugz *bugzilla.Client, db *database.DB) {
 	}
 	fmt.Printf("%s: finished with total errors: %d\n", saver.id, saver.errorCount)
 	totalErrors += saver.errorCount
-
 	fmt.Printf("Attachments downloaded and saved with %d errors\n", totalErrors)
 
 }
