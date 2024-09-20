@@ -1,6 +1,7 @@
 package bugzilla
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	. "hugpoint.tech/freebsd/forge/common/bugzilla"
@@ -61,67 +62,86 @@ func NewClient() Client {
 	return bc
 }
 
-// DownloadBugzillaBugs downloads all bugs from the Bugzilla API and saves them to individual JSON files.
-func (bc *Client) DownloadBugzillaBugs() ([]Bug, error) { // Make URL to bugs
+// DownloadBugzillaBugs downloads bugs from the Bugzilla API in batches and sends them through a channel.
+func (bc *Client) DownloadBugzillaBugs(ctx context.Context) (<-chan Bug, <-chan error) {
 	apiURL := bc.URL + "/bug"
 
-	// Specify the pagination parameters
-	pageSize := 1000
-	pageNumber := 0
-	totalBugs := 0
+	// Create channels for streaming bugs and errors
+	bugChan := make(chan Bug)
+	errChan := make(chan error)
 
-	// TODO: this is suboptimal - memory consumption will go through the roof.
-	// We need to refactor this function to work like a resumable iterator.
-	bugs := make([]Bug, 0, 200000)
+	// Start a goroutine to download and send bugs
+	go func() {
+		defer close(bugChan)
+		defer close(errChan)
 
-	for {
-		// Create query parameters
-		params := url.Values{}
-		params.Set("token", bc.token)
-		params.Set("limit", fmt.Sprint(pageSize))
-		params.Set("offset", fmt.Sprint((pageNumber)*pageSize))
+		// Specify the pagination parameters
+		pageSize := 1000
+		pageNumber := 0
+		totalBugs := 0 // Counter to track total bugs downloaded
 
-		// Construct the full URL with query parameters
-		fullURL := apiURL + "?" + params.Encode()
+		for {
+			// Create query parameters
+			params := url.Values{}
+			params.Set("token", bc.token)
+			params.Set("limit", fmt.Sprint(pageSize))
+			params.Set("offset", fmt.Sprint(pageNumber*pageSize))
 
-		// Make a GET request to the API
-		response, err := bc.http.Get(fullURL)
-		if err != nil {
-			return nil, fmt.Errorf("error making GET request to %s: %v", fullURL, err)
+			// Construct the full URL with query parameters
+			fullURL := apiURL + "?" + params.Encode()
+
+			// Make a GET request to the API
+			response, err := bc.http.Get(fullURL)
+			if err != nil {
+				errChan <- fmt.Errorf("error making GET request to %s: %v", fullURL, err)
+				return
+			}
+
+			// Read the response body
+			body, err := io.ReadAll(response.Body)
+			if err != nil {
+				errChan <- fmt.Errorf("error reading response body from %s: %v", fullURL, err)
+				response.Body.Close()
+				return
+			}
+			response.Body.Close()
+
+			// Process the JSON data
+			var bugsResponse map[string][]Bug
+			err = json.Unmarshal(body, &bugsResponse)
+			if err != nil {
+				errChan <- fmt.Errorf("error decoding JSON: %v", err)
+				return
+			}
+
+			// Send each bug individually through the channel
+			for _, bug := range bugsResponse["bugs"] {
+				select {
+				case <-ctx.Done(): // Handle context cancellation
+					errChan <- ctx.Err()
+					return
+				case bugChan <- bug:
+					totalBugs++ // Increment total bugs counter for each bug
+				}
+			}
+
+			// Print the number of bugs downloaded after each page
+			fmt.Printf("Total bugs downloaded: %d\n", totalBugs)
+
+			// Check if there are more pages
+			if len(bugsResponse["bugs"]) < pageSize {
+				break
+			}
+
+			// Move to the next page
+			pageNumber++
 		}
 
-		// Read the response body
-		body, err := io.ReadAll(response.Body)
-		if err != nil {
-			return nil, fmt.Errorf("error reading response body from %s: %v", fullURL, err)
-		}
-		response.Body.Close()
+		// Print final bug count
+		fmt.Printf("Finished downloading. Total bugs downloaded: %d\n", totalBugs)
+	}()
 
-		// Process the JSON data
-		var bugsResponse map[string][]Bug
-		err = json.Unmarshal(body, &bugsResponse)
-		if err != nil {
-			return nil, fmt.Errorf("error decoding JSON: %v", err)
-		}
-
-		bugs = append(bugs, bugsResponse["bugs"]...)
-
-		// Update the total number of bugs downloaded
-		totalBugs += len(bugsResponse["bugs"])
-
-		// Print the number of bugs downloaded after each page
-		fmt.Printf("Total bugs downloaded: %d\n", totalBugs)
-
-		// Check if there are more pages
-		if len(bugsResponse["bugs"]) < pageSize {
-			break
-		}
-
-		// Move to the next page
-		pageNumber++
-	}
-
-	return bugs, nil
+	return bugChan, errChan
 }
 
 func (bc *Client) DownloadBugComments(bugID int) ([]Comment, error) {
