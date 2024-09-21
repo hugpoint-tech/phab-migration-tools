@@ -83,8 +83,6 @@ func (w *worker) saveComments(in <-chan types.Comment) {
 }
 
 func DownloadBugzillaComments(bugz *bugzilla.Client, db *database.DB) {
-	// TODO verify that bugs were downloaded and warn user if 0 bugs were found in the database
-
 	var downloaderWaitGroup sync.WaitGroup
 	var saverWaitGroup sync.WaitGroup
 	var totalErrors int
@@ -94,7 +92,8 @@ func DownloadBugzillaComments(bugz *bugzilla.Client, db *database.DB) {
 
 	downloaders := make([]worker, 0, DOWNLOAD_WORKER_COUNT)
 
-	for idx := range cap(downloaders) {
+	// Initialize and start downloaders before sending bug IDs to the channel
+	for idx := 0; idx < DOWNLOAD_WORKER_COUNT; idx++ {
 		w := worker{
 			id:   fmt.Sprintf("comment-downloader-%d", idx),
 			bugz: bugz,
@@ -102,30 +101,39 @@ func DownloadBugzillaComments(bugz *bugzilla.Client, db *database.DB) {
 		}
 		downloaders = append(downloaders, w)
 		downloaderWaitGroup.Add(1)
+		go w.downloadComment(idChan, commentChan) // Start goroutine to download comments
 	}
 
+	// Initialize and start saver
 	saver := worker{
 		id: fmt.Sprintf("comment-saver"),
 		db: db,
 		wg: &saverWaitGroup,
 	}
+	saverWaitGroup.Add(1)
+	go saver.saveComments(commentChan) // Start goroutine to save comments
 
-	go saver.saveComments(commentChan)
-
-	for _, d := range downloaders {
-		go d.downloadComment(idChan, commentChan)
-	}
-
+	// Count bugs and send IDs to idChan
+	bugCount := 0
 	err := db.ForEachBug(func(b types.Bug) error {
-		idChan <- b.ID
+		bugCount++
+		idChan <- b.ID // Send bug IDs to the channel
 		return nil
 	})
-	util.CheckFatal("failed to read bugs form the database", err)
 
-	close(idChan)
-	downloaderWaitGroup.Wait()
-	close(commentChan)
-	saverWaitGroup.Wait()
+	util.CheckFatal("failed to read bugs from the database", err)
+
+	// If no bugs are found, warn the user and exit
+	if bugCount == 0 {
+		fmt.Println("Warning: No bugs found in the database. Exiting without downloading comments.")
+		close(idChan)
+		return
+	}
+
+	close(idChan)              // Close idChan after all IDs have been sent
+	downloaderWaitGroup.Wait() // Wait for all downloaders to finish
+	close(commentChan)         // Close commentChan after all comments are downloaded
+	saverWaitGroup.Wait()      // Wait for the saver to finish saving comments
 
 	// Sum up errors from all workers
 	for _, d := range downloaders {
@@ -241,7 +249,7 @@ func DownloadBugzillaAttachments(bugz *bugzilla.Client, db *database.DB) {
 
 	// Create and launch attachment download workers
 	downloaders := make([]worker, 0, DOWNLOAD_WORKER_COUNT)
-	for idx := range cap(downloaders) {
+	for idx := 0; idx < DOWNLOAD_WORKER_COUNT; idx++ {
 		w := worker{
 			id:   fmt.Sprintf("attachment-downloader-%d", idx),
 			bugz: bugz,                 // Bugzilla client for downloading attachments
@@ -264,12 +272,21 @@ func DownloadBugzillaAttachments(bugz *bugzilla.Client, db *database.DB) {
 		go d.downloadAttachment(idChan, attachmentChan)
 	}
 
-	// Fetch bug IDs from the database and send them to the downloaders
+	// Count bugs in the database before processing
+	bugCount := 0
 	err := db.ForEachBug(func(b types.Bug) error {
-		idChan <- b.ID // Send bug ID to the idChan
-		return nil     // Return nil to continue iteration
+		bugCount++
+		idChan <- b.ID
+		return nil
 	})
+
 	util.CheckFatal("failed to read bugs from the database", err)
+
+	// If no bugs are found, warn the user and exit
+	if bugCount == 0 {
+		fmt.Println("Warning: No bugs found in the database. Exiting without downloading attachments.")
+		return
+	}
 
 	close(idChan)              // Close idChan to signal no more bug IDs will be sent
 	downloaderWaitGroup.Wait() // Wait for all downloaders to finish
