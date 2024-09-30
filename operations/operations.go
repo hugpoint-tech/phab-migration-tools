@@ -5,6 +5,7 @@ package operations
 /// and keep main clean.
 
 import (
+	"context"
 	"fmt"
 	"hugpoint.tech/freebsd/forge/bugzilla"
 	types "hugpoint.tech/freebsd/forge/common/bugzilla"
@@ -144,13 +145,35 @@ func DownloadBugzillaComments(bugz *bugzilla.Client, db *database.DB) {
 }
 
 func DownloadBugzillaBugs(bugz *bugzilla.Client, db *database.DB) {
-	bugs, err := bugz.DownloadBugzillaBugs()
-	util.CheckFatal("failed to download bugzilla bugs", err)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
-	for _, bug := range bugs {
-		err = db.InsertBug(bug)
-		util.CheckFatal("failed to insert bug into the database", err)
+	// Get the bug and error channels
+	bugChan, errChan := bugz.DownloadBugzillaBugs(ctx)
 
+	// Process bugs as they are streamed
+	for {
+		select {
+		case bug, ok := <-bugChan:
+			if !ok {
+				// Bug channel is closed, meaning no more bugs to process
+				fmt.Println("Finished downloading all bugs.")
+				return
+			}
+
+			// Insert each bug into the database
+			err := db.InsertBug(bug)
+			if err != nil {
+				// Handle error if insertion fails
+				fmt.Printf("failed to insert bug into the database", err)
+			}
+
+		case err := <-errChan:
+			if err != nil {
+				// Handle errors that occur during downloading
+				util.CheckFatal("failed to download bugzilla bugs", err)
+			}
+		}
 	}
 }
 
