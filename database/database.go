@@ -4,7 +4,6 @@ import (
 	"context"
 	"embed"
 	"encoding/json"
-	"fmt"
 	"hugpoint.tech/freebsd/forge/common/bugzilla"
 	"hugpoint.tech/freebsd/forge/util"
 	"log"
@@ -37,25 +36,28 @@ func embeddedSQL(filename string) string {
 	return string(sql)
 }
 
-func New(path string) DB { // Return a pointer to database
+func New(path string) *DB { // Return a pointer to DB
 	var err error
-	var db DB
+	db := &DB{} // Create a pointer to the DB struct
 
+	// Create a new connection pool
 	db.pool, err = sqlitex.NewPool(path, sqlitex.PoolOptions{
 		PoolSize: runtime.NumCPU() * 4,
 	})
 	util.CheckFatal("failed to create connection pool", err)
 
+	// Get a connection from the pool to apply the schema
 	conn := db.pool.Get(context.Background())
 	if conn == nil {
 		util.Fatal("failed to open database connection")
 	}
-	db.pool.Put(conn)
+	defer db.pool.Put(conn) // Put the connection back after applying the schema
 
+	// Apply the schema
 	err = sqlitex.ExecScript(conn, qSchema)
 	util.CheckFatal("error applying schema", err)
 
-	return db
+	return db // Return a pointer to the DB struct
 }
 
 func (db *DB) GetDistinctUsers() ([]bugzilla.User, error) {
@@ -152,34 +154,42 @@ func (db *DB) InsertComment(comments ...bugzilla.Comment) (err error) {
 	return
 }
 
-func (db *DB) InsertAttachment(attachments ...bugzilla.Attachment) error {
+func (db *DB) InsertAttachment(attachments ...bugzilla.Attachment) (err error) {
 	conn := db.pool.Get(context.Background())
 	if conn == nil {
 		util.Fatal("failed to open database connection")
 	}
 	defer db.pool.Put(conn)
 
-	// Prepare the query for each attachment in the batch
-	for _, attachment := range attachments {
-		execOptions := sqlitex.ExecOptions{
-			Args: []interface{}{
-				attachment.ID,
-				attachment.BugID,
-				attachment.CreationTime,
-				attachment.Creator,
-				attachment.Summary,
-				attachment.Data,
-			},
-		}
+	var txCommit func(*error)
 
-		// Try inserting the attachment into the database
-		err := sqlitex.Execute(conn, qInsertAttachments, &execOptions)
+	txCommit, err = sqlitex.ImmediateTransaction(conn)
+	if err != nil {
+		return
+	}
+	defer txCommit(&err)
+
+	stmt := conn.Prep(qInsertAttachments)
+
+	for _, a := range attachments {
+		stmt.BindInt64(1, int64(a.ID))
+		stmt.BindInt64(2, int64(a.BugID))
+		stmt.BindText(3, a.CreationTime)
+		stmt.BindText(4, a.Creator)
+		stmt.BindText(5, a.Summary)
+		stmt.BindText(6, string(a.Data))
+
+		_, err = stmt.Step()
 		if err != nil {
-			return fmt.Errorf("error inserting attachments: %v", err)
+			return
+		}
+		err = stmt.Reset()
+		if err != nil {
+			return
 		}
 	}
 
-	return nil
+	return
 }
 
 func (db *DB) ForEachBug(pred func(b bugzilla.Bug) error) error {

@@ -7,6 +7,7 @@ import (
 	"hugpoint.tech/freebsd/forge/forgejo"
 	"hugpoint.tech/freebsd/forge/operations"
 	"os"
+	"time"
 )
 
 func main() {
@@ -20,7 +21,14 @@ func main() {
 
 	switch command {
 	case "bugzilla-download-bugs":
-		operations.DownloadBugzillaBugs(&bugzClient, &db)
+		startTime := time.Now() // Record the start time
+
+		// Call the download function
+		operations.DownloadBugzillaBugs(&bugzClient, db)
+
+		// Calculate and print the time taken
+		duration := time.Since(startTime)
+		fmt.Printf("DownloadBugzillaBugs completed in %s\n", duration)
 	case "help":
 		printHelp()
 
@@ -31,10 +39,24 @@ func main() {
 		//}
 
 	case "bugzilla-download-comments":
-		operations.DownloadBugzillaComments(&bugzClient, &db)
+		startTime := time.Now() // Record the start time
+
+		// Call the download function
+		operations.DownloadBugzillaComments(&bugzClient, db)
+
+		// Calculate and print the time taken
+		duration := time.Since(startTime)
+		fmt.Printf("DownloadBugzillaComments completed in %s\n", duration)
 
 	case "bugzilla-download-attachments":
-		operations.DownloadBugzillaAttachments(&bugzClient, &db)
+		startTime := time.Now() // Record the start time
+
+		// Call the download function
+		operations.DownloadBugzillaAttachments(&bugzClient, db)
+
+		// Calculate and print the time taken
+		duration := time.Since(startTime)
+		fmt.Printf("DownloadBugzillaAttachments completed in %s\n", duration)
 
 	case "gitea-upload-bugs":
 
@@ -58,12 +80,12 @@ func main() {
 
 func printHelp() { // not sure about functions descriptions
 	fmt.Println("available commands:\n" +
-		"bugzilla-download-bugs - downloads bugs from bugzilla\n" +
-		"bugzilla-show-bugs - shows bugzilla bugs\n" +
-		"bugzilla-download-users - downloads users from bugzilla\n" +
-		"bugzilla-download-comments - downloads comments from bugs db\n" +
-		"bugzilla-download-attachments - downloads attachments from bugs db\n" +
-		"gitea-upload-bugs [url] - upload bugs to gitea from local bugzilla db\n" +
+		"bugzilla-download-bugs - Downloads bugs from bugzilla\n" +
+		"bugzilla-show-bugs - Shows bugzilla bugs\n" +
+		"bugzilla-download-users - Downloads users from bugzilla\n" +
+		"bugzilla-download-comments - Downloads comments from bugs db. Can take long time ~16+ hours.\n" +
+		"bugzilla-download-attachments - Downloads attachments from bugs db. Can take long time ~16+ hours.\n" +
+		"gitea-upload-bugs [url] - Uploads bugs to gitea from local bugzilla db\n" +
 		"help - shows available commands")
 
 }
