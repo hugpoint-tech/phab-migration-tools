@@ -68,6 +68,7 @@ func (bc *Client) DownloadBugzillaBugs() ([]Bug, error) { // Make URL to bugs
 	// Specify the pagination parameters
 	pageSize := 1000
 	pageNumber := 0
+	totalBugs := 0
 
 	// TODO: this is suboptimal - memory consumption will go through the roof.
 	// We need to refactor this function to work like a resumable iterator.
@@ -104,6 +105,12 @@ func (bc *Client) DownloadBugzillaBugs() ([]Bug, error) { // Make URL to bugs
 		}
 
 		bugs = append(bugs, bugsResponse["bugs"]...)
+
+		// Update the total number of bugs downloaded
+		totalBugs += len(bugsResponse["bugs"])
+
+		// Print the number of bugs downloaded after each page
+		fmt.Printf("Total bugs downloaded: %d\n", totalBugs)
 
 		// Check if there are more pages
 		if len(bugsResponse["bugs"]) < pageSize {
