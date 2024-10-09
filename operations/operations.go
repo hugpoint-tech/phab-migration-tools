@@ -33,7 +33,7 @@ func (w *worker) downloadComment(in <-chan int, out chan<- types.Comment) {
 
 	for id := range in {
 		// Check if comments already exist for the bug
-		exists, err := w.db.CheckExists("comments", int64(id))
+		exists, err := w.db.CheckExists("comments", "bug_id", int64(id))
 		if err != nil {
 			fmt.Printf("%s: error checking if comments exist for bug %d: %s\n", w.id, id, err)
 			w.errorCount++
@@ -176,7 +176,7 @@ func DownloadBugzillaBugs(bugz *bugzilla.Client, db *database.DB) {
 			}
 
 			// Check if the bug already exists in the database
-			exists, err := db.CheckExists("bugs", int64(bug.ID))
+			exists, err := db.CheckExists("bugs", "id", int64(bug.ID))
 			if err != nil {
 				// Handle error during the existence check
 				fmt.Printf("failed to check bug existence in database: %v\n", err)
@@ -209,7 +209,7 @@ func (w *worker) downloadAttachment(in <-chan int, out chan<- types.Attachment) 
 
 	for id := range in { // Loop over the bug IDs received from the in channel
 		// Check if attachments already exist for the bug
-		exists, err := w.db.CheckExists("attachments", int64(id))
+		exists, err := w.db.CheckExists("attachments", "bug_id", int64(id))
 		if err != nil {
 			fmt.Printf("%s: error checking if attachments exist for bug %d: %s\n", w.id, id, err)
 			w.errorCount++
