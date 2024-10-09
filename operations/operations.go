@@ -32,6 +32,19 @@ func (w *worker) downloadComment(in <-chan int, out chan<- types.Comment) {
 	defer w.wg.Done()
 
 	for id := range in {
+		// Check if comments already exist for the bug
+		exists, err := w.db.CheckExists("comments", int64(id))
+		if err != nil {
+			fmt.Printf("%s: error checking if comments exist for bug %d: %s\n", w.id, id, err)
+			w.errorCount++
+			continue
+		}
+
+		if exists {
+			fmt.Printf("%s: comments for bug %d already exist. Skipping download.\n", w.id, id)
+			continue
+		}
+
 		comments, err := w.bugz.DownloadBugComments(id)
 		if err != nil {
 			fmt.Printf("%s: failed to download comments for bug %d: %s\n", w.id, id, err)
@@ -94,6 +107,7 @@ func DownloadBugzillaComments(bugz *bugzilla.Client, db *database.DB) {
 		w := worker{
 			id:   fmt.Sprintf("comment-downloader-%d", idx),
 			bugz: bugz,
+			db:   db,
 			wg:   &downloaderWaitGroup,
 		}
 		downloaders = append(downloaders, w)
@@ -161,8 +175,21 @@ func DownloadBugzillaBugs(bugz *bugzilla.Client, db *database.DB) {
 				return
 			}
 
-			// Insert each bug into the database
-			err := db.InsertBug(bug)
+			// Check if the bug already exists in the database
+			exists, err := db.CheckExists("bugs", int64(bug.ID))
+			if err != nil {
+				// Handle error during the existence check
+				fmt.Printf("failed to check bug existence in database: %v\n", err)
+				continue
+			}
+
+			if exists {
+				fmt.Printf("Bug ID %d already exists in the database. Skipping download.\n", bug.ID)
+				continue
+			}
+
+			// Insert the bug into the database only if it doesn't exist
+			err = db.InsertBug(bug)
 			if err != nil {
 				// Handle error if insertion fails
 				fmt.Printf("failed to insert bug into the database", err)
@@ -181,6 +208,19 @@ func (w *worker) downloadAttachment(in <-chan int, out chan<- types.Attachment) 
 	defer w.wg.Done() // Mark worker as done when the function exits
 
 	for id := range in { // Loop over the bug IDs received from the in channel
+		// Check if attachments already exist for the bug
+		exists, err := w.db.CheckExists("attachments", int64(id))
+		if err != nil {
+			fmt.Printf("%s: error checking if attachments exist for bug %d: %s\n", w.id, id, err)
+			w.errorCount++
+			continue
+		}
+
+		if exists {
+			fmt.Printf("%s: attachments for bug %d already exist. Skipping download.\n", w.id, id)
+			continue
+		}
+
 		attachments, err := w.bugz.DownloadBugAttachments(id) // Download attachments for the bug
 		if err != nil {
 			fmt.Printf("%s: failed to download attachments for bug %d: %s\n", w.id, id, err)
@@ -249,6 +289,7 @@ func DownloadBugzillaAttachments(bugz *bugzilla.Client, db *database.DB) {
 			id:   fmt.Sprintf("attachment-downloader-%d", idx),
 			bugz: bugz,                 // Bugzilla client for downloading attachments
 			wg:   &downloaderWaitGroup, // Use WaitGroup to track completion
+			db:   db,
 		}
 		downloaders = append(downloaders, w)
 		downloaderWaitGroup.Add(1) // Add a worker to the WaitGroup
