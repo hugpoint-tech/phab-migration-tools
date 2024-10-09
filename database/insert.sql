@@ -1,1 +1,1 @@
-INSERT INTO bugs (id, CreationTime, Creator, OtherFieldsJSON) VALUES (?, ?, ?, ?);
+INSERT OR IGNORE INTO bugs (id, CreationTime, Creator, OtherFieldsJSON) VALUES (?, ?, ?, ?);

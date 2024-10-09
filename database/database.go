@@ -4,6 +4,7 @@ import (
 	"context"
 	"embed"
 	"encoding/json"
+	"fmt"
 	"hugpoint.tech/freebsd/forge/common/bugzilla"
 	"hugpoint.tech/freebsd/forge/util"
 	"log"
@@ -234,4 +235,35 @@ func (db *DB) ForEachUser(pred func(b bugzilla.User) error) error {
 	}
 
 	return sqlitex.Execute(conn, qSelectUsers, &opts)
+}
+
+// CheckExists checks if a record value from columnName exists in the specified table.
+func (db *DB) CheckExists(tableName string, columnName string, value int64) (bool, error) {
+	if db == nil {
+		return false, fmt.Errorf("DB is nil")
+	}
+	// Get a connection from the pool
+	conn := db.pool.Get(context.Background())
+	if conn == nil {
+		return false, fmt.Errorf("failed to get a connection from the pool")
+	}
+	defer db.pool.Put(conn) // Ensure connection is returned to the pool
+
+	// Safely construct the SQL query string with the table name
+	query := "SELECT COUNT(1) FROM " + tableName + " WHERE " + columnName + " = ?"
+
+	var count int
+	err := sqlitex.Execute(conn, query, &sqlitex.ExecOptions{
+		Args: []interface{}{value},
+		ResultFunc: func(stmt *sqlite.Stmt) error {
+			count = stmt.ColumnInt(0)
+			return nil
+		},
+	})
+	if err != nil {
+		return false, fmt.Errorf("error checking if record exists in table %s for bug %d: %v", tableName, value, err)
+	}
+
+	// Return true if the entry already exists, false otherwise
+	return count > 0, nil
 }
