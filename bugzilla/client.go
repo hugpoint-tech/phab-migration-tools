@@ -1,6 +1,7 @@
 package bugzilla
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	. "hugpoint.tech/freebsd/forge/common/bugzilla"
@@ -10,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"sync"
 )
 
 type Client struct {
@@ -61,25 +63,30 @@ func NewClient() Client {
 	return bc
 }
 
-// DownloadBugzillaBugs downloads all bugs from the Bugzilla API and saves them to individual JSON files.
-func (bc *Client) DownloadBugzillaBugs() ([]Bug, error) { // Make URL to bugs
+func (bc *Client) DownloadBugzillaBugs(ctx context.Context) (<-chan Bug, <-chan error) {
 	apiURL := bc.URL + "/bug"
 
-	// Specify the pagination parameters
+	// Create channels for streaming bugs and errors
+	bugChan := make(chan Bug)
+	errChan := make(chan error)
+
+	// Create a WaitGroup to manage goroutines
+	var wg sync.WaitGroup
+
+	// Pagination parameters
 	pageSize := 1000
-	pageNumber := 0
-	totalBugs := 0
+	totalBugs := 0 // Counter to track total bugs downloaded
 
-	// TODO: this is suboptimal - memory consumption will go through the roof.
-	// We need to refactor this function to work like a resumable iterator.
-	bugs := make([]Bug, 0, 200000)
+	// Define the downloadBugs function
+	var downloadBugs func(pageNumber int)
+	downloadBugs = func(pageNumber int) {
+		defer wg.Done()
 
-	for {
 		// Create query parameters
 		params := url.Values{}
 		params.Set("token", bc.token)
 		params.Set("limit", fmt.Sprint(pageSize))
-		params.Set("offset", fmt.Sprint((pageNumber)*pageSize))
+		params.Set("offset", fmt.Sprint(pageNumber*pageSize))
 
 		// Construct the full URL with query parameters
 		fullURL := apiURL + "?" + params.Encode()
@@ -87,13 +94,16 @@ func (bc *Client) DownloadBugzillaBugs() ([]Bug, error) { // Make URL to bugs
 		// Make a GET request to the API
 		response, err := bc.http.Get(fullURL)
 		if err != nil {
-			return nil, fmt.Errorf("error making GET request to %s: %v", fullURL, err)
+			errChan <- fmt.Errorf("error making GET request to %s: %v", fullURL, err)
+			return
 		}
 
 		// Read the response body
 		body, err := io.ReadAll(response.Body)
 		if err != nil {
-			return nil, fmt.Errorf("error reading response body from %s: %v", fullURL, err)
+			errChan <- fmt.Errorf("error reading response body from %s: %v", fullURL, err)
+			response.Body.Close()
+			return
 		}
 		response.Body.Close()
 
@@ -101,27 +111,52 @@ func (bc *Client) DownloadBugzillaBugs() ([]Bug, error) { // Make URL to bugs
 		var bugsResponse map[string][]Bug
 		err = json.Unmarshal(body, &bugsResponse)
 		if err != nil {
-			return nil, fmt.Errorf("error decoding JSON: %v", err)
+			errChan <- fmt.Errorf("error decoding JSON: %v", err)
+			return
 		}
 
-		bugs = append(bugs, bugsResponse["bugs"]...)
+		// Track the number of bugs downloaded for the current page
+		bugsDownloaded := len(bugsResponse["bugs"])
 
-		// Update the total number of bugs downloaded
-		totalBugs += len(bugsResponse["bugs"])
+		// Send each bug individually through the channel
+		for _, bug := range bugsResponse["bugs"] {
+			select {
+			case <-ctx.Done(): // Handle context cancellation
+				errChan <- ctx.Err()
+				return
+			case bugChan <- bug:
+				totalBugs++ // Increment total bugs counter for each bug
+			}
+		}
 
 		// Print the number of bugs downloaded after each page
 		fmt.Printf("Total bugs downloaded: %d\n", totalBugs)
 
-		// Check if there are more pages
-		if len(bugsResponse["bugs"]) < pageSize {
-			break
+		// If we received fewer bugs than pageSize, stop (no more pages)
+		if bugsDownloaded < pageSize {
+			return
 		}
 
-		// Move to the next page
-		pageNumber++
+		// Launch the next page download in a new goroutine
+		wg.Add(1)
+		go downloadBugs(pageNumber + 1)
 	}
 
-	return bugs, nil
+	// Start downloading with the first page
+	wg.Add(1)
+	go downloadBugs(0)
+
+	// Start a goroutine to close the channels after all downloads complete
+	go func() {
+		wg.Wait()
+		close(bugChan)
+		close(errChan)
+
+		// Print final bug count
+		fmt.Printf("Finished downloading. Total bugs downloaded: %d\n", totalBugs)
+	}()
+
+	return bugChan, errChan
 }
 
 func (bc *Client) DownloadBugComments(bugID int) ([]Comment, error) {
