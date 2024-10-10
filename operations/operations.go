@@ -136,8 +136,9 @@ func DownloadBugzillaComments(bugz *bugzilla.Client, db *database.DB) {
 }
 
 func DownloadBugzillaBugs(bugz *bugzilla.Client, db *database.DB) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+
+	// Use non-cancelable context
+	ctx := context.Background()
 
 	// Get the bug and error channels
 	bugChan, errChan := bugz.DownloadBugzillaBugs(ctx)

@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"sync"
 )
 
 type Client struct {
@@ -62,7 +63,6 @@ func NewClient() Client {
 	return bc
 }
 
-// DownloadBugzillaBugs downloads bugs from the Bugzilla API in batches and sends them through a channel.
 func (bc *Client) DownloadBugzillaBugs(ctx context.Context) (<-chan Bug, <-chan error) {
 	apiURL := bc.URL + "/bug"
 
@@ -70,72 +70,87 @@ func (bc *Client) DownloadBugzillaBugs(ctx context.Context) (<-chan Bug, <-chan 
 	bugChan := make(chan Bug)
 	errChan := make(chan error)
 
-	// Start a goroutine to download and send bugs
-	go func() {
-		defer close(bugChan)
-		defer close(errChan)
+	// Create a WaitGroup to manage goroutines
+	var wg sync.WaitGroup
 
-		// Specify the pagination parameters
-		pageSize := 1000
-		pageNumber := 0
-		totalBugs := 0 // Counter to track total bugs downloaded
+	// Pagination parameters
+	pageSize := 1000
+	totalBugs := 0 // Counter to track total bugs downloaded
 
-		for {
-			// Create query parameters
-			params := url.Values{}
-			params.Set("token", bc.token)
-			params.Set("limit", fmt.Sprint(pageSize))
-			params.Set("offset", fmt.Sprint(pageNumber*pageSize))
+	// Define the downloadBugs function
+	var downloadBugs func(pageNumber int)
+	downloadBugs = func(pageNumber int) {
+		defer wg.Done()
 
-			// Construct the full URL with query parameters
-			fullURL := apiURL + "?" + params.Encode()
+		// Create query parameters
+		params := url.Values{}
+		params.Set("token", bc.token)
+		params.Set("limit", fmt.Sprint(pageSize))
+		params.Set("offset", fmt.Sprint(pageNumber*pageSize))
 
-			// Make a GET request to the API
-			response, err := bc.http.Get(fullURL)
-			if err != nil {
-				errChan <- fmt.Errorf("error making GET request to %s: %v", fullURL, err)
-				return
-			}
+		// Construct the full URL with query parameters
+		fullURL := apiURL + "?" + params.Encode()
 
-			// Read the response body
-			body, err := io.ReadAll(response.Body)
-			if err != nil {
-				errChan <- fmt.Errorf("error reading response body from %s: %v", fullURL, err)
-				response.Body.Close()
-				return
-			}
-			response.Body.Close()
-
-			// Process the JSON data
-			var bugsResponse map[string][]Bug
-			err = json.Unmarshal(body, &bugsResponse)
-			if err != nil {
-				errChan <- fmt.Errorf("error decoding JSON: %v", err)
-				return
-			}
-
-			// Send each bug individually through the channel
-			for _, bug := range bugsResponse["bugs"] {
-				select {
-				case <-ctx.Done(): // Handle context cancellation
-					errChan <- ctx.Err()
-					return
-				case bugChan <- bug:
-					totalBugs++ // Increment total bugs counter for each bug
-				}
-			}
-
-			// Print the number of bugs downloaded after each page
-			fmt.Printf("Total bugs downloaded: %d\n", totalBugs)
-
-			// Check if there are more pages
-			if len(bugsResponse["bugs"]) < pageSize {
-				break
-			}
-
-			// Move to the next page
-			pageNumber++
+		// Make a GET request to the API
+		response, err := bc.http.Get(fullURL)
+		if err != nil {
+			errChan <- fmt.Errorf("error making GET request to %s: %v", fullURL, err)
+			return
 		}
+
+		// Read the response body
+		body, err := io.ReadAll(response.Body)
+		if err != nil {
+			errChan <- fmt.Errorf("error reading response body from %s: %v", fullURL, err)
+			response.Body.Close()
+			return
+		}
+		response.Body.Close()
+
+		// Process the JSON data
+		var bugsResponse map[string][]Bug
+		err = json.Unmarshal(body, &bugsResponse)
+		if err != nil {
+			errChan <- fmt.Errorf("error decoding JSON: %v", err)
+			return
+		}
+
+		// Track the number of bugs downloaded for the current page
+		bugsDownloaded := len(bugsResponse["bugs"])
+
+		// Send each bug individually through the channel
+		for _, bug := range bugsResponse["bugs"] {
+			select {
+			case <-ctx.Done(): // Handle context cancellation
+				errChan <- ctx.Err()
+				return
+			case bugChan <- bug:
+				totalBugs++ // Increment total bugs counter for each bug
+			}
+		}
+
+		// Print the number of bugs downloaded after each page
+		fmt.Printf("Total bugs downloaded: %d\n", totalBugs)
+
+		// If we received fewer bugs than pageSize, stop (no more pages)
+		if bugsDownloaded < pageSize {
+			return
+		}
+
+		// Launch the next page download in a new goroutine
+		wg.Add(1)
+		go downloadBugs(pageNumber + 1)
+	}
+
+	// Start downloading with the first page
+	wg.Add(1)
+	go downloadBugs(0)
+
+	// Start a goroutine to close the channels after all downloads complete
+	go func() {
+		wg.Wait()
+		close(bugChan)
+		close(errChan)
 
 		// Print final bug count
 		fmt.Printf("Finished downloading. Total bugs downloaded: %d\n", totalBugs)
