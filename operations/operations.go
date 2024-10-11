@@ -6,6 +6,7 @@ package operations
 
 import (
 	"context"
+	_ "context"
 	"fmt"
 	"hugpoint.tech/freebsd/forge/bugzilla"
 	types "hugpoint.tech/freebsd/forge/common/bugzilla"
@@ -134,6 +135,14 @@ func DownloadBugzillaComments(bugz *bugzilla.Client, db *database.DB) {
 	fmt.Printf("Comments downloaded and saved with %d errors\n", totalErrors)
 
 }
+
+// Constants
+const pageSize = 1000
+const goroutineCount = 20
+
+// Global counter to track total bugs downloaded
+var totalBugsDownloaded int
+var mu sync.Mutex // Mutex to protect the totalBugsDownloaded counter
 
 func DownloadBugzillaBugs(bugz *bugzilla.Client, db *database.DB) {
 
