@@ -65,7 +65,7 @@ func NewClient() Client {
 
 var (
 	totalBugs      int        // Total bugs counter
-	mu             sync.Mutex // Mutex for synchronizing access to the totalBugsDownloaded slice
+	mu             sync.Mutex // Mutex for synchronizing access to the totalBugs
 	pageSize       = 1000
 	goroutineCount = 20
 )

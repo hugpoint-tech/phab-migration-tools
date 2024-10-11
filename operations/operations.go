@@ -136,14 +136,6 @@ func DownloadBugzillaComments(bugz *bugzilla.Client, db *database.DB) {
 
 }
 
-// Constants
-const pageSize = 1000
-const goroutineCount = 20
-
-// Global counter to track total bugs downloaded
-var totalBugsDownloaded int
-var mu sync.Mutex // Mutex to protect the totalBugsDownloaded counter
-
 func DownloadBugzillaBugs(bugz *bugzilla.Client, db *database.DB) {
 
 	// Use non-cancelable context
