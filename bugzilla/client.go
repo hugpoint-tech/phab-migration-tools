@@ -1,7 +1,6 @@
 package bugzilla
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	. "hugpoint.tech/freebsd/forge/common/bugzilla"
@@ -15,9 +14,9 @@ import (
 )
 
 type Client struct {
-	Token string
+	token string
 	URL   string
-	Http  *http.Client
+	http  *http.Client
 }
 
 type loginResponse struct {
@@ -34,15 +33,15 @@ func NewClient() Client {
 
 	bc := Client{
 		URL:   "https://bugs.freebsd.org/bugzilla/rest",
-		Token: "",
-		Http:  &http.Client{},
+		token: "",
+		http:  &http.Client{},
 	}
 
 	formData := url.Values{}
 	formData.Set("login", login)
 	formData.Set("password", password)
 
-	response, err := bc.Http.Get(bc.URL + "/login?" + formData.Encode())
+	response, err := bc.http.Get(bc.URL + "/login?" + formData.Encode())
 	util.CheckFatal("login and/or password incorrect", err)
 
 	defer response.Body.Close()
@@ -58,7 +57,7 @@ func NewClient() Client {
 	if loginResponse.Token == "" {
 		util.Fatal("login token is empty")
 	}
-	bc.Token = loginResponse.Token
+	bc.token = loginResponse.Token
 
 	return bc
 }
@@ -70,104 +69,50 @@ var (
 	goroutineCount = 20
 )
 
-// Define the downloadBugs function that each goroutine will run
-func (bc *Client) downloadBugs(routineNumber int, wg *sync.WaitGroup, bugChan chan Bug, errChan chan error) {
-	defer wg.Done() // Signal that this goroutine is done when function returns
+func (bc *Client) DownloadBugs(offset, limit int) ([]Bug, error) {
+	// Prepare the request URL with query parameters for pagination (offset and limit)
+	reqURL := fmt.Sprintf("%s/bug?offset=%d&limit=%d", bc.URL, offset, limit)
 
-	// Local counter to track bugs for this goroutine
-	localDownloaded := 0
-	pageNumber := routineNumber // Start each goroutine from its own page number
-	apiURL := bc.URL + "/bug"   // Base API URL
-
-	for {
-		// Create query parameters for the API request
-		params := url.Values{}
-		params.Set("token", bc.Token)
-		params.Set("limit", fmt.Sprint(pageSize))
-		params.Set("offset", fmt.Sprint(pageNumber*pageSize)) // Calculate offset based on page number
-
-		// Construct the full URL with query parameters
-		fullURL := apiURL + "?" + params.Encode()
-
-		// Make a GET request to the API
-		response, err := bc.Http.Get(fullURL)
-		if err != nil {
-			errChan <- fmt.Errorf("error making GET request to %s: %v", fullURL, err)
-			return
-		}
-
-		// Read the response body
-		body, err := io.ReadAll(response.Body)
-		if err != nil {
-			errChan <- fmt.Errorf("error reading response body from %s: %v", fullURL, err)
-			response.Body.Close()
-			return
-		}
-		response.Body.Close()
-
-		// Process the JSON data
-		var bugsResponse map[string][]Bug
-		err = json.Unmarshal(body, &bugsResponse)
-		if err != nil {
-			errChan <- fmt.Errorf("error decoding JSON: %v", err)
-			return
-		}
-
-		// Send each bug individually through the bug channel
-		for _, bug := range bugsResponse["bugs"] {
-			bugChan <- bug
-			localDownloaded++                                                          // Increment local counter for this goroutine
-			fmt.Printf("Goroutine %d downloading bug ID: %d\n", routineNumber, bug.ID) // Print which bug is being downloaded
-		}
-
-		// Use a mutex to safely update the total number of bugs downloaded across all goroutines
-		mu.Lock()
-		totalBugs += localDownloaded
-		mu.Unlock()
-
-		// Stop if fewer bugs than pageSize are returned
-		if len(bugsResponse["bugs"]) < pageSize {
-			break
-		}
-
-		// Move to the next page for this goroutine
-		pageNumber += goroutineCount
-	}
-	fmt.Printf("Total bugs: %d\n", totalBugs)
-}
-
-// DownloadBugzillaBugs function to start the download with goroutineCount goroutines
-func (bc *Client) DownloadBugzillaBugs(ctx context.Context) (<-chan Bug, <-chan error) {
-	// Channels for bugs and errors
-	bugChan := make(chan Bug)
-	errChan := make(chan error)
-
-	// WaitGroup to track completion of all goroutines
-	var wg sync.WaitGroup
-
-	// Start goroutineCount goroutines
-	for i := 0; i < goroutineCount; i++ {
-		wg.Add(1)                                    // Increment the WaitGroup counter
-		go bc.downloadBugs(i, &wg, bugChan, errChan) // i is the routineNumber, used to calculate the start page
+	// Create a new request
+	req, err := http.NewRequest("GET", reqURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	// Close the channels once all goroutines are done
-	go func() {
-		wg.Wait() // Wait for all goroutines to complete
-		close(bugChan)
-		close(errChan)
-	}()
+	// Set the authorization token in the headers, if needed
+	req.Header.Set("Authorization", fmt.Sprintf("Token %s", bc.token))
 
-	// Return the channels so the caller can read from them
-	return bugChan, errChan
+	// Execute the request
+	resp, err := bc.http.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to execute request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	// Check for a non-200 status code
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+	}
+
+	// Parse the response body
+	var result struct {
+		Bugs []Bug `json:"bugs"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	// Return the list of bugs
+	return result.Bugs, nil
 }
 
 func (bc *Client) DownloadBugComments(bugID int) ([]Comment, error) {
 	apiURL := fmt.Sprintf("%s/bug/%d/comment", bc.URL, bugID)
 	params := url.Values{}
-	params.Set("token", bc.Token)
+	params.Set("token", bc.token)
 	fullURL := apiURL + "?" + params.Encode()
-	response, err := bc.Http.Get(fullURL)
+	response, err := bc.http.Get(fullURL)
 
 	if err != nil {
 		return nil, fmt.Errorf("error making GET request to %s: %v", fullURL, err)
@@ -195,10 +140,10 @@ func (bc *Client) DownloadBugComments(bugID int) ([]Comment, error) {
 func (bc *Client) DownloadBugAttachments(bugID int) ([]Attachment, error) {
 	apiURL := fmt.Sprintf("%s/bug/%d/attachment", bc.URL, bugID)
 	params := url.Values{}
-	params.Set("token", bc.Token)
+	params.Set("token", bc.token)
 
 	fullURL := apiURL + "?" + params.Encode()
-	response, err := bc.Http.Get(fullURL)
+	response, err := bc.http.Get(fullURL)
 	if err != nil {
 		return nil, fmt.Errorf("error making GET request to %s: %v", fullURL, err)
 	}
