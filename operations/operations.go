@@ -165,7 +165,7 @@ func (w *worker) downloadComment(in <-chan int, out chan<- types.Comment) {
 	for id := range in {
 		comments, err := w.bugz.DownloadBugComments(id)
 		if err != nil {
-			fmt.Printf("%d: failed to download comments for bug %d: %s\n", w.id, id, err)
+			fmt.Printf("Worker %s: failed to download comments for bug %d: %s\n", w.Id(), id, err)
 			w.errorCount++
 			continue
 		}
@@ -173,7 +173,7 @@ func (w *worker) downloadComment(in <-chan int, out chan<- types.Comment) {
 		for _, c := range comments {
 			out <- c
 		}
-		fmt.Printf("%d: downloaded comments for bug %d\n", w.id, id)
+		fmt.Printf("%s: downloaded %d comments for bug %d\n", w.Id(), len(comments), id)
 	}
 
 	fmt.Printf("%d finished\n", w.id)
@@ -184,7 +184,7 @@ func (w *worker) Id() string {
 	return fmt.Sprintf("%s-%d", w.workerType, w.id)
 }
 
-func (w *worker) saveComments(in <-chan types.Comment) {
+func (w *worker) saveComments(in <-chan types.Comment) error {
 	defer w.wg.Done()
 
 	buffer := make([]types.Comment, 0, commentBatchSize)
@@ -195,24 +195,25 @@ func (w *worker) saveComments(in <-chan types.Comment) {
 		if len(buffer) == commentBatchSize {
 			err := w.db.InsertComment(buffer...)
 			if err != nil {
-				fmt.Printf("%d: failed to save comments %s\n", w.id, err)
+				fmt.Printf("%s: failed to save comments %s\n", w.Id(), err)
 				w.errorCount++
 				continue
 			}
-			fmt.Printf("%d: saved %d comments\n", w.id, len(buffer))
+			fmt.Printf("%s: saved %d comments\n", w.Id(), len(buffer))
 			buffer = buffer[:0]
 		}
 	}
 
 	err := w.db.InsertComment(buffer...)
-	fmt.Printf("%d: saved %d comments", w.id, len(buffer))
+	fmt.Printf("%s: saved %d comments", w.Id(), len(buffer))
 	if err != nil {
-		fmt.Printf("%d: failed to save comments %s\n", w.id, err)
+		fmt.Printf("%s: failed to save comments %s\n", w.Id(), err)
 		w.errorCount++
-		return
+		return nil
 	}
 
-	fmt.Printf("%s finished\n", w.id)
+	fmt.Printf("%s finished\n", w.Id())
+	return nil
 }
 
 func DownloadBugzillaComments(bugz *bugzilla.Client, db *database.DB) {
@@ -234,13 +235,12 @@ func DownloadBugzillaComments(bugz *bugzilla.Client, db *database.DB) {
 			wg:         &downloaderWaitGroup,
 			workerType: "comment-downloader",
 		}
-		fmt.Println(w.Id()) // This will print "comment-downloader-0", "comment-downloader-1", etc.
 		downloaders = append(downloaders, w)
 		downloaderWaitGroup.Add(1)
 	}
 
 	saver := worker{
-		workerType: "comment-saver",
+		workerType: "comment-downloader",
 		db:         db,
 		wg:         &saverWaitGroup,
 	}
@@ -279,7 +279,7 @@ func (w *worker) downloadAttachment(in <-chan int, out chan<- types.Attachment) 
 	for id := range in { // Loop over the bug IDs received from the in channel
 		attachments, err := w.bugz.DownloadBugAttachments(id) // Download attachments for the bug
 		if err != nil {
-			fmt.Printf("%s: failed to download attachments for bug %d: %s\n", w.id, id, err)
+			fmt.Printf("%s: failed to download attachments for bug %d: %s\n", w.Id(), id, err)
 			w.errorCount++
 			continue
 		}
@@ -288,7 +288,7 @@ func (w *worker) downloadAttachment(in <-chan int, out chan<- types.Attachment) 
 		for _, a := range attachments {
 			out <- a
 		}
-		fmt.Printf("%d: downloaded attachments for bug %d\n", w.id, id)
+		fmt.Printf("%s: downloaded attachments for bug %d\n", w.Id(), id)
 	}
 
 	fmt.Printf("%d finished\n", w.id) // Log that the worker is done
@@ -307,25 +307,25 @@ func (w *worker) saveAttachments(in <-chan types.Attachment) {
 		if len(buffer) == attachmentBatchSize {
 			err := w.db.InsertAttachment(buffer...)
 			if err != nil {
-				fmt.Printf("%d: failed to save attachments %s\n", w.id, err)
+				fmt.Printf("%s: failed to save attachments %s\n", w.Id(), err)
 				w.errorCount++
 				continue
 			}
-			fmt.Printf("%d: saved %d attachments\n", w.id, len(buffer))
+			fmt.Printf("%s: saved %d attachments\n", w.Id(), len(buffer))
 			buffer = buffer[:0] // Reset buffer after insertion
 		}
 	}
 
 	// Insert any remaining attachments in the buffer
 	err := w.db.InsertAttachment(buffer...)
-	fmt.Printf("%d: saved %d attachments", w.id, len(buffer))
+	fmt.Printf("%s: saved %d attachments", w.Id(), len(buffer))
 	if err != nil {
-		fmt.Printf("%d: failed to save attachments %s\n", w.id, err)
+		fmt.Printf("%s: failed to save attachments %s\n", w.Id(), err)
 		w.errorCount++
 		return
 	}
 
-	fmt.Printf("%d finished\n", w.id) // Log that the worker is done
+	fmt.Printf("%s finished\n", w.Id()) // Log that the worker is done
 }
 
 func DownloadBugzillaAttachments(bugz *bugzilla.Client, db *database.DB) {
@@ -347,7 +347,6 @@ func DownloadBugzillaAttachments(bugz *bugzilla.Client, db *database.DB) {
 			wg:         &downloaderWaitGroup, // Use WaitGroup to track completion
 			workerType: "attachment-downloader",
 		}
-		fmt.Println(w.Id())
 		downloaders = append(downloaders, w)
 		downloaderWaitGroup.Add(1) // Add a worker to the WaitGroup
 	}
