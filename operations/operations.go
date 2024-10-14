@@ -33,17 +33,19 @@ type worker struct {
 }
 
 func (w *worker) downloadBugsWorker(limit int, out chan<- types.Bug) error {
-	offset := 0 // Start from the beginning
+	iteration := 0 // Track the current iteration
 
 	for {
+		// Calculate the offset based on the worker's id and the current iteration
+		offset := (w.id * limit) + (iteration * limit * downloadWorkerCount)
 
-		// Call the Client's DownloadBugs method with the current offset and limit
+		// Call the Client's DownloadBugs method with the calculated offset and limit
 		bugs, err := w.bugz.DownloadBugs(offset, limit)
 		if err != nil {
 			return fmt.Errorf("worker %s failed to download bugs: %w", w.Id(), err)
 		}
 
-		fmt.Printf("%s: Downloaded %d bugs\n", w.Id(), len(bugs))
+		fmt.Printf("%s: Downloaded %d bugs with offset %d\n", w.Id(), len(bugs), offset)
 
 		// Send each bug to the channel for saving
 		for _, bug := range bugs {
@@ -55,8 +57,8 @@ func (w *worker) downloadBugsWorker(limit int, out chan<- types.Bug) error {
 			break
 		}
 
-		// Increment the offset for the next batch of bugs
-		offset += limit
+		// Increment the iteration count for the next batch of bugs
+		iteration++
 	}
 
 	fmt.Printf("Worker %s: Finished downloading all bugs\n", w.Id())
