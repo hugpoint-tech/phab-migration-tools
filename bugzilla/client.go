@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"sync"
 )
 
 type Client struct {
@@ -61,13 +60,6 @@ func NewClient() Client {
 
 	return bc
 }
-
-var (
-	totalBugs      int        // Total bugs counter
-	mu             sync.Mutex // Mutex for synchronizing access to the totalBugs
-	pageSize       = 1000
-	goroutineCount = 20
-)
 
 func (bc *Client) DownloadBugs(offset, limit int) ([]Bug, error) {
 	// Prepare the request URL with query parameters for pagination (offset and limit)

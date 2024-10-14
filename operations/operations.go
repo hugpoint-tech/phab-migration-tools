@@ -12,7 +12,6 @@ import (
 	"hugpoint.tech/freebsd/forge/database"
 	"hugpoint.tech/freebsd/forge/util"
 	"sync"
-	"time"
 )
 
 var (
@@ -31,15 +30,12 @@ type worker struct {
 	wg         *sync.WaitGroup
 	errorCount int
 	workerType string // Worker type (e.g., "comment-downloader")
-	bugChan    chan types.Bug
 }
 
-func (w *worker) DownloadBugsWorker(limit int, bugChan chan types.Bug) error {
+func (w *worker) downloadBugsWorker(limit int, out chan<- types.Bug) error {
 	offset := 0 // Start from the beginning
 
 	for {
-		// Start measuring download time for the current worker
-		startDownload := time.Now()
 
 		// Call the Client's DownloadBugs method with the current offset and limit
 		bugs, err := w.bugz.DownloadBugs(offset, limit)
@@ -47,21 +43,12 @@ func (w *worker) DownloadBugsWorker(limit int, bugChan chan types.Bug) error {
 			return fmt.Errorf("worker %s failed to download bugs: %w", w.Id(), err)
 		}
 
-		// Measure download time for the current batch
-		downloadDuration := time.Since(startDownload)
-		fmt.Printf("Worker %s: Downloaded %d bugs in %v\n", w.Id(), len(bugs), downloadDuration)
-
-		// Start measuring insert time (sending bugs to channel)
-		startInsert := time.Now()
+		fmt.Printf("%s: Downloaded %d bugs\n", w.Id(), len(bugs))
 
 		// Send each bug to the channel for saving
 		for _, bug := range bugs {
-			bugChan <- bug // Send each bug to the channel
+			out <- bug // Send each bug to the channel
 		}
-
-		// Measure insert time for the current batch
-		insertDuration := time.Since(startInsert)
-		fmt.Printf("Worker %s: Inserted %d bugs into channel in %v\n", w.Id(), len(bugs), insertDuration)
 
 		// If the number of bugs downloaded is less than the limit, exit the loop
 		if len(bugs) < limit {
@@ -76,11 +63,11 @@ func (w *worker) DownloadBugsWorker(limit int, bugChan chan types.Bug) error {
 	return nil
 }
 
-func (w *worker) saveBugs(bugChan chan types.Bug) {
-	for bug := range bugChan { // Loop over bugs sent to the channel
+func (w *worker) saveBugs(bugStream <-chan types.Bug) {
+	for bug := range bugStream { // Loop over bugs sent to the channel
 		err := w.db.InsertBug(bug) // Save each bug to the database
 		if err != nil {
-			fmt.Printf("Saver %d: failed to save bug ID %d: %s\n", w.id, bug.ID, err)
+			fmt.Printf("Saver %s: failed to save bug ID %d: %v\n", w.Id(), bug.ID, err)
 			w.errorCount++ // Track errors
 		}
 	}
@@ -110,7 +97,7 @@ func DownloadBugzillaBugs(bugz *bugzilla.Client, db *database.DB) {
 		// Start each worker in a separate goroutine
 		go func(w worker) {
 			defer downloaderWaitGroup.Done()
-			err := w.DownloadBugsWorker(pageSizeLimit, bugChan)
+			err := w.downloadBugsWorker(pageSizeLimit, bugChan)
 			if err != nil {
 				fmt.Printf("Worker %s encountered an error: %s\n", w.Id(), err)
 			}
@@ -288,7 +275,7 @@ func (w *worker) downloadAttachment(in <-chan int, out chan<- types.Attachment) 
 		for _, a := range attachments {
 			out <- a
 		}
-		fmt.Printf("%s: downloaded attachments for bug %d\n", w.Id(), id)
+		fmt.Printf("%s: downloaded %d attachments for bug %d\n", w.Id(), len(attachments), id)
 	}
 
 	fmt.Printf("%d finished\n", w.id) // Log that the worker is done
