@@ -33,6 +33,7 @@ type worker struct {
 }
 
 func (w *worker) downloadBugsWorker(limit int, out chan<- types.Bug) error {
+	defer w.wg.Done()
 	iteration := 0 // Track the current iteration
 
 	for {
@@ -66,6 +67,7 @@ func (w *worker) downloadBugsWorker(limit int, out chan<- types.Bug) error {
 }
 
 func (w *worker) saveBugs(bugStream <-chan types.Bug) {
+	defer w.wg.Done()
 	for bug := range bugStream { // Loop over bugs sent to the channel
 		err := w.db.InsertBug(bug) // Save each bug to the database
 		if err != nil {
@@ -98,11 +100,7 @@ func DownloadBugzillaBugs(bugz *bugzilla.Client, db *database.DB) {
 
 		// Start each worker in a separate goroutine
 		go func(w worker) {
-			defer downloaderWaitGroup.Done()
-			err := w.downloadBugsWorker(pageSizeLimit, bugChan)
-			if err != nil {
-				fmt.Printf("Worker %s encountered an error: %s\n", w.Id(), err)
-			}
+			w.downloadBugsWorker(pageSizeLimit, bugChan)
 		}(w)
 	}
 
@@ -120,7 +118,6 @@ func DownloadBugzillaBugs(bugz *bugzilla.Client, db *database.DB) {
 
 		// Start each saver worker in a separate goroutine
 		go func(w worker) {
-			defer saverWaitGroup.Done()
 			w.saveBugs(bugChan) // Save bugs from the channel
 		}(w)
 	}

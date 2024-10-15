@@ -62,11 +62,22 @@ func NewClient() Client {
 }
 
 func (bc *Client) DownloadBugs(offset, limit int) ([]Bug, error) {
-	// Prepare the request URL with query parameters for pagination (offset and limit)
-	reqURL := fmt.Sprintf("%s/bug?offset=%d&limit=%d", bc.URL, offset, limit)
+	// Parse the base URL
+	baseURL, err := url.Parse(fmt.Sprintf("%s/bug", bc.URL))
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse base URL: %w", err)
+	}
 
-	// Create a new request
-	req, err := http.NewRequest("GET", reqURL, nil)
+	// Prepare query parameters
+	params := url.Values{}
+	params.Set("offset", fmt.Sprint(offset))
+	params.Set("limit", fmt.Sprint(limit))
+
+	// Add query parameters to the URL
+	baseURL.RawQuery = params.Encode()
+
+	// Create a new GET request with the constructed URL
+	req, err := http.NewRequest("GET", baseURL.String(), nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
