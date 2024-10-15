@@ -99,9 +99,8 @@ func DownloadBugzillaBugs(bugz *bugzilla.Client, db *database.DB) {
 		downloaderWaitGroup.Add(1)
 
 		// Start each worker in a separate goroutine
-		go func(w worker) {
-			w.downloadBugsWorker(pageSizeLimit, bugChan)
-		}(w)
+		go w.downloadBugsWorker(pageSizeLimit, bugChan)
+
 	}
 
 	// Initialize saver workers
@@ -117,9 +116,8 @@ func DownloadBugzillaBugs(bugz *bugzilla.Client, db *database.DB) {
 		saverWaitGroup.Add(1)
 
 		// Start each saver worker in a separate goroutine
-		go func(w worker) {
-			w.saveBugs(bugChan) // Save bugs from the channel
-		}(w)
+		go w.saveBugs(bugChan) // Save bugs from the channel
+
 	}
 
 	downloaderWaitGroup.Wait() // Wait for all downloaders to finish
