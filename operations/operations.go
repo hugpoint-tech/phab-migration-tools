@@ -43,7 +43,9 @@ func (w *worker) downloadBugsWorker(limit int, out chan<- types.Bug) error {
 		// Call the Client's DownloadBugs method with the calculated offset and limit
 		bugs, err := w.bugz.DownloadBugs(offset, limit)
 		if err != nil {
-			return fmt.Errorf("worker %s failed to download bugs: %w", w.Id(), err)
+			fmt.Printf("worker %s failed to download bugs: %s", w.Id(), err)
+			w.errorCount++
+			continue
 		}
 
 		fmt.Printf("%s: Downloaded %d bugs with offset %d\n", w.Id(), len(bugs), offset)
@@ -73,6 +75,7 @@ func (w *worker) saveBugs(bugStream <-chan types.Bug) {
 		if err != nil {
 			fmt.Printf("Saver %s: failed to save bug ID %d: %v\n", w.Id(), bug.ID, err)
 			w.errorCount++ // Track errors
+			continue
 		}
 	}
 	fmt.Printf("Saver %s: Finished saving all bugs\n", w.Id())
