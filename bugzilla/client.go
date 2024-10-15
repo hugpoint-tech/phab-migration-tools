@@ -61,67 +61,53 @@ func NewClient() Client {
 	return bc
 }
 
-// DownloadBugzillaBugs downloads all bugs from the Bugzilla API and saves them to individual JSON files.
-func (bc *Client) DownloadBugzillaBugs() ([]Bug, error) { // Make URL to bugs
-	apiURL := bc.URL + "/bug"
-
-	// Specify the pagination parameters
-	pageSize := 1000
-	pageNumber := 0
-	totalBugs := 0
-
-	// TODO: this is suboptimal - memory consumption will go through the roof.
-	// We need to refactor this function to work like a resumable iterator.
-	bugs := make([]Bug, 0, 200000)
-
-	for {
-		// Create query parameters
-		params := url.Values{}
-		params.Set("token", bc.token)
-		params.Set("limit", fmt.Sprint(pageSize))
-		params.Set("offset", fmt.Sprint((pageNumber)*pageSize))
-
-		// Construct the full URL with query parameters
-		fullURL := apiURL + "?" + params.Encode()
-
-		// Make a GET request to the API
-		response, err := bc.http.Get(fullURL)
-		if err != nil {
-			return nil, fmt.Errorf("error making GET request to %s: %v", fullURL, err)
-		}
-
-		// Read the response body
-		body, err := io.ReadAll(response.Body)
-		if err != nil {
-			return nil, fmt.Errorf("error reading response body from %s: %v", fullURL, err)
-		}
-		response.Body.Close()
-
-		// Process the JSON data
-		var bugsResponse map[string][]Bug
-		err = json.Unmarshal(body, &bugsResponse)
-		if err != nil {
-			return nil, fmt.Errorf("error decoding JSON: %v", err)
-		}
-
-		bugs = append(bugs, bugsResponse["bugs"]...)
-
-		// Update the total number of bugs downloaded
-		totalBugs += len(bugsResponse["bugs"])
-
-		// Print the number of bugs downloaded after each page
-		fmt.Printf("Total bugs downloaded: %d\n", totalBugs)
-
-		// Check if there are more pages
-		if len(bugsResponse["bugs"]) < pageSize {
-			break
-		}
-
-		// Move to the next page
-		pageNumber++
+func (bc *Client) DownloadBugs(offset, limit int) ([]Bug, error) {
+	// Parse the base URL
+	baseURL, err := url.Parse(fmt.Sprintf("%s/bug", bc.URL))
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse base URL: %w", err)
 	}
 
-	return bugs, nil
+	// Prepare query parameters
+	params := url.Values{}
+	params.Set("offset", fmt.Sprint(offset))
+	params.Set("limit", fmt.Sprint(limit))
+
+	// Add query parameters to the URL
+	baseURL.RawQuery = params.Encode()
+
+	// Create a new GET request with the constructed URL
+	req, err := http.NewRequest("GET", baseURL.String(), nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	// Set the authorization token in the headers, if needed
+	req.Header.Set("Authorization", fmt.Sprintf("Token %s", bc.token))
+
+	// Execute the request
+	resp, err := bc.http.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to execute request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	// Check for a non-200 status code
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+	}
+
+	// Parse the response body
+	var result struct {
+		Bugs []Bug `json:"bugs"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	// Return the list of bugs
+	return result.Bugs, nil
 }
 
 func (bc *Client) DownloadBugComments(bugID int) ([]Comment, error) {
