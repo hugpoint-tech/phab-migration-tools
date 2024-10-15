@@ -32,7 +32,7 @@ type worker struct {
 	workerType string // Worker type (e.g., "comment-downloader")
 }
 
-func (w *worker) downloadBugsWorker(limit int, out chan<- types.Bug) error {
+func (w *worker) downloadBugsWorker(limit int, out chan<- types.Bug) {
 	defer w.wg.Done()
 	iteration := 0 // Track the current iteration
 
@@ -43,7 +43,9 @@ func (w *worker) downloadBugsWorker(limit int, out chan<- types.Bug) error {
 		// Call the Client's DownloadBugs method with the calculated offset and limit
 		bugs, err := w.bugz.DownloadBugs(offset, limit)
 		if err != nil {
-			return fmt.Errorf("worker %s failed to download bugs: %w", w.Id(), err)
+			fmt.Printf("worker %s failed to download bugs: %s\n", w.Id(), err)
+			w.errorCount += 1
+			continue
 		}
 
 		fmt.Printf("%s: Downloaded %d bugs with offset %d\n", w.Id(), len(bugs), offset)
@@ -62,8 +64,8 @@ func (w *worker) downloadBugsWorker(limit int, out chan<- types.Bug) error {
 		iteration++
 	}
 
-	fmt.Printf("Worker %s: Finished downloading all bugs\n", w.Id())
-	return nil
+	fmt.Printf("Worker %s: finished\n", w.Id())
+	return
 }
 
 func (w *worker) saveBugs(bugStream <-chan types.Bug) {
@@ -99,9 +101,7 @@ func DownloadBugzillaBugs(bugz *bugzilla.Client, db *database.DB) {
 		downloaderWaitGroup.Add(1)
 
 		// Start each worker in a separate goroutine
-		go func(w worker) {
-			w.downloadBugsWorker(pageSizeLimit, bugChan)
-		}(w)
+		go w.downloadBugsWorker(pageSizeLimit, bugChan)
 	}
 
 	// Initialize saver workers
@@ -116,10 +116,9 @@ func DownloadBugzillaBugs(bugz *bugzilla.Client, db *database.DB) {
 		savers[idx] = w
 		saverWaitGroup.Add(1)
 
-		// Start each saver worker in a separate goroutine
-		go func(w worker) {
-			w.saveBugs(bugChan) // Save bugs from the channel
-		}(w)
+		// Start saver worker
+		go w.saveBugs(bugChan)
+
 	}
 
 	downloaderWaitGroup.Wait() // Wait for all downloaders to finish
