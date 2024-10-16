@@ -16,7 +16,7 @@ import (
 
 var (
 	downloadWorkerCount = 20
-	saverWorkerCount    = 10
+	saverWorkerCount    = 1
 	commentBatchSize    = 100
 	bugBatchSize        = 1000
 	pageSizeLimit       = 1000
@@ -68,16 +68,36 @@ func (w *worker) downloadBugsWorker(limit int, out chan<- types.Bug) {
 	return
 }
 
-func (w *worker) saveBugs(bugStream <-chan types.Bug) {
+func (w *worker) saveBugs(in <-chan types.Bug) {
 	defer w.wg.Done()
-	for bug := range bugStream { // Loop over bugs sent to the channel
-		err := w.db.InsertBug(bug) // Save each bug to the database
-		if err != nil {
-			fmt.Printf("Saver %s: failed to save bug ID %d: %v\n", w.Id(), bug.ID, err)
-			w.errorCount++ // Track errors
+
+	buffer := make([]types.Bug, 0, bugBatchSize)
+
+	for bug := range in {
+		buffer = append(buffer, bug)
+
+		if len(buffer) == bugBatchSize {
+			err := w.db.InsertBug(buffer...)
+			if err != nil {
+				fmt.Printf("%s: failed to save bugs %s\n", w.Id(), err)
+				w.errorCount += 1
+				continue
+			}
+			fmt.Printf("%s: saved %d bugs\n", w.Id(), len(buffer))
+			buffer = buffer[:0]
 		}
 	}
-	fmt.Printf("Saver %s: Finished saving all bugs\n", w.Id())
+
+	err := w.db.InsertBug(buffer...)
+	if err != nil {
+		fmt.Printf("%s: failed to save bugs %s\n", w.Id(), err)
+		w.errorCount++
+	} else {
+		fmt.Printf("%s: saved %d bugs", w.Id(), len(buffer))
+	}
+
+	fmt.Printf("%s finished\n", w.Id())
+	return
 }
 
 func DownloadBugzillaBugs(bugz *bugzilla.Client, db *database.DB) {
@@ -169,7 +189,7 @@ func (w *worker) Id() string {
 	return fmt.Sprintf("%s-%d", w.workerType, w.id)
 }
 
-func (w *worker) saveComments(in <-chan types.Comment) error {
+func (w *worker) saveComments(in <-chan types.Comment) {
 	defer w.wg.Done()
 
 	buffer := make([]types.Comment, 0, commentBatchSize)
@@ -190,15 +210,15 @@ func (w *worker) saveComments(in <-chan types.Comment) error {
 	}
 
 	err := w.db.InsertComment(buffer...)
-	fmt.Printf("%s: saved %d comments", w.Id(), len(buffer))
 	if err != nil {
 		fmt.Printf("%s: failed to save comments %s\n", w.Id(), err)
 		w.errorCount++
-		return nil
+	} else {
+		fmt.Printf("%s: saved %d comments", w.Id(), len(buffer))
 	}
 
 	fmt.Printf("%s finished\n", w.Id())
-	return nil
+	return
 }
 
 func DownloadBugzillaComments(bugz *bugzilla.Client, db *database.DB) {

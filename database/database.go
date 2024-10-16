@@ -95,26 +95,47 @@ func (db *DB) GetDistinctUsers() ([]bugzilla.User, error) {
 
 }
 
-func (db *DB) InsertBug(bug bugzilla.Bug) error {
-	bugJson, err := json.Marshal(bug)
-	util.CheckFatal("error marshalling bug JSON", err)
-
+func (db *DB) InsertBug(bugs ...bugzilla.Bug) (err error) {
 	conn := db.pool.Get(context.Background())
 	if conn == nil {
 		util.Fatal("failed to open database connection")
 	}
 	defer db.pool.Put(conn)
+	var txCommit func(*error)
 
-	execOptions := sqlitex.ExecOptions{
-		Args: []interface{}{
-			bug.ID,
-			bug.CreationTime,
-			bug.Creator,
-			string(bugJson),
-		},
+	txCommit, err = sqlitex.ImmediateTransaction(conn)
+	if err != nil {
+		return err
+	}
+	defer txCommit(&err)
+
+	bugsJsons := make([]string, 0, len(bugs))
+	for _, bug := range bugs {
+		bugJson, err := json.Marshal(bug)
+		if err != nil {
+			return err
+		}
+		bugsJsons = append(bugsJsons, string(bugJson))
 	}
 
-	return sqlitex.ExecuteTransient(conn, qInsertBug, &execOptions)
+	stmt := conn.Prep(qInsertBug)
+	for i := range bugs {
+		stmt.BindInt64(1, int64(bugs[i].ID))
+		stmt.BindText(2, bugs[i].CreationTime)
+		stmt.BindText(3, bugs[i].Creator)
+		stmt.BindText(4, bugsJsons[i])
+
+		_, err = stmt.Step()
+		if err != nil {
+			return
+		}
+		err = stmt.Reset()
+		if err != nil {
+			return
+		}
+	}
+
+	return
 }
 
 func (db *DB) InsertComment(comments ...bugzilla.Comment) (err error) {
